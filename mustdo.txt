@@ -1,0 +1,6 @@
+namelist for coupling
+starttime
+endtime
+coupling interval (equal to dt?)
+nprocsocn
+nprocsice
