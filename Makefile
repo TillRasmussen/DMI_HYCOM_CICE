@@ -22,12 +22,8 @@
 #$(error Environment variable ESMFMKFILE was not set.)
 #endif
 
-#include $(ESMFMKFILE)
-include /home/tar/esmf/hycom-cice-src/esmf_v7_1_0r/esmf/lib/libg/Unicos.intel.64.mpi.default/esmf.mk 
-LANLCICEDIR= /data/tar/CICE_v6/test/intel_debug/compile
-#HYCOMDIR=/netapp/research/tar/esmf/hycom-cice-src/HYCOM_2_109/src_2.2.109-17Tsig2_relo_mpi
-HYCOMDIR=/data/tar/git_hycom/HYCOM-src
-UTILINCS        = -I$(LANLCICEDIR) -L$(LANLCICEDIR) -lcice_intel -I$(HYCOMDIR) -L$(HYCOMDIR) -lhycom_intel
+include $(ESMFMKFILE)
+UTILINCS        = -I$(CICE_LIB) -L$(CICE_LIB) -lcice_$(compiler) -I$(HYCOM_LIB) -L$(HYCOM_LIB) -lhycom_$(compiler)
 ################################################################################
 ################################################################################
 
@@ -48,7 +44,7 @@ UTILINCS        = -I$(LANLCICEDIR) -L$(LANLCICEDIR) -lcice_intel -I$(HYCOMDIR) -
 
 # -----------------------------------------------------------------------------
 hycom_cice_nuopc: hycom_cice_nuopc.o esm.o cice_cap.o hycom_cap.o conn.o mod_cb_arrays_nuopc_glue.o mod_hycom_nuopc_glue.o mod_nuopc_options.o
-	$(ESMF_F90LINKER) $(ESMF_F90LINKOPTS) $(UTILINCS) $(ESMF_F90LINKPATHS) $(ESMF_F90LINKRPATHS) -o $@ $^ $(ESMF_F90ESMFLINKLIBS) -lcice_intel -lhycom_intel
+	$(ESMF_F90LINKER) $(ESMF_F90LINKOPTS) $(UTILINCS) $(ESMF_F90LINKPATHS) $(ESMF_F90LINKRPATHS) -o $@ $^ $(ESMF_F90ESMFLINKLIBS) -lcice_${compiler} -lhycom_${compiler}
 # module dependencies:
 esmApp.o: esm.o
 esm.o: cice_cap.o hycom_cap.o conn.o mod_nuopc_options.o 
