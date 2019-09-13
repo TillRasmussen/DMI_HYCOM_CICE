@@ -23,10 +23,9 @@
 #endif
 
 #include $(ESMFMKFILE)
-include /home/tar/esmf/hycom-cice-src/esmf_v7_1_0r/esmf/lib/libg/Unicos.intel.64.mpi.default/esmf.mk 
-LANLCICEDIR= /data/tar/CICE_v6/test/intel_debug/compile
-#HYCOMDIR=/netapp/research/tar/esmf/hycom-cice-src/HYCOM_2_109/src_2.2.109-17Tsig2_relo_mpi
-HYCOMDIR=/data/tar/git_hycom/HYCOM-src
+include /data/ang/sourcecode/coupled/esmf_v7_1-git/esmf/lib/libg/Unicos.intel.64.mpi.default/esmf.mk 
+LANLCICEDIR= /data/ang/sourcecode/coupled/build_cice_dmi/intel_dmi_debug/compile
+HYCOMDIR=/data/ang/sourcecode/coupled/build_hycom_dmi/DMI_intel_debug_coupled
 UTILINCS        = -I$(LANLCICEDIR) -L$(LANLCICEDIR) -lcice_intel -I$(HYCOMDIR) -L$(HYCOMDIR) -lhycom_intel
 ################################################################################
 ################################################################################
