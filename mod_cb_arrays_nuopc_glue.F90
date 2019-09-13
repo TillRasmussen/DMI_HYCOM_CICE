@@ -74,7 +74,7 @@
         
         ! ocn coupling frequency
         public ocn_cpl_frq    ! in days
-        !public icefrq         ! in time step in HYCOM
+        public icefrq         ! in time step in HYCOM
         
         ! scalars and flags
         public g, onem, qonem, thkfrz, baclin, spcifh, pcp_fact

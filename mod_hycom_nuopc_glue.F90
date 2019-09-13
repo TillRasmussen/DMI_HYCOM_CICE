@@ -264,19 +264,6 @@ module mod_hycom_nuopc_glue
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-#ifdef tarnotneeded     
-    ! create the import and export FieldBundles
-    glue%importFields = ESMF_FieldBundleCreate(rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    glue%exportFields = ESMF_FieldBundleCreate(rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-#endif
     ! initialize coupling flags
     cpl_taux      =.false.
     cpl_tauy      =.false.
@@ -300,111 +287,6 @@ module mod_hycom_nuopc_glue
 
   !-----------------------------------------------------------------------------
 
-!  subroutine HYCOM_GlueFieldsRealize(glue, state, standardNames, rc)
-!    type(hycom_nuopc_glue_type), intent(inout)  :: glue
-!    type(ESMF_State)                            :: state
-!    character(len=*)                            :: standardNames(:)
-!    integer, intent(out), optional              :: rc
-!    
-    ! local variables
-!    integer                           :: i
-    
-!    if (present(rc)) rc = ESMF_SUCCESS
-!    
-!    do i=1, size(standardNames)
-!
-!      call ESMF_LogWrite(trim('Realize glue field: '//standardNames(i)), ESMF_LOGMSG_INFO, rc=rc)
-!      if(rc /= ESMF_SUCCESS) call ESMF_Finalize(rc=rc, endflag=ESMF_END_ABORT)
-!
-!      call HYCOM_GlueFieldRealize(glue, state, &
-!        standardName=standardNames(i), rc=rc)
-!      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-!        line=__LINE__, &
-!        file=__FILE__)) &
-!        return  ! bail out
-!    enddo
-!    
-!  end subroutine
-
-  !-----------------------------------------------------------------------------
-
-!  subroutine HYCOM_GlueFieldRealize(glue, state, standardName, rc)
-!    type(hycom_nuopc_glue_type), intent(inout)  :: glue
-!    type(ESMF_State)                            :: state
-!    character(len=*)                            :: standardName
-!    integer, intent(out), optional              :: rc
-    
-    ! local variables
-!    logical                           :: connected
-!    character(len=80)                 :: fieldName
-!    type(ESMF_Field)                  :: field, shadow
-!    type(ESMF_StateIntent_Flag)       :: stateIntent
-!    real(kind=ESMF_KIND_R8), pointer  :: farrayPtr(:,:)
-!    
-!    if (present(rc)) rc = ESMF_SUCCESS
-    
-    ! determine shortName from field dictionary, to be used as fieldName
-!    fieldName=standardName
-!
-!    call ESMF_StateGet(state, stateintent=stateIntent, rc=rc)
-!    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-!      line=__LINE__, &
-!      file=__FILE__)) &
-!      return  ! bail out
-!    if (stateIntent == ESMF_STATEINTENT_UNSPECIFIED) then
-      ! not a valid intent
-!      call ESMF_LogSetError(ESMF_RC_ARG_BAD, &
-!        msg="The incoming state must have import or export intent!", &
-!        line=__LINE__, &
-!        file=__FILE__, &
-!        rcToReturn=rc)
-!      return  ! bail out
-!    endif
-
-!    call ESMF_LogWrite(trim('HYCOM: Create connected glue field: '//standardName), ESMF_LOGMSG_INFO, rc=rc)
-!    if(rc /= ESMF_SUCCESS) call ESMF_Finalize(rc=rc, endflag=ESMF_END_ABORT)
-    ! create the Field object
-!    field = ESMF_FieldCreate(glue%grid, ESMF_TYPEKIND_R8, name=fieldName, &
-!      rc=rc)
-!    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-!      line=__LINE__, &
-!      file=__FILE__)) &
-!      return  ! bail out
-!    call ESMF_FieldGet(field, farrayPtr=farrayPtr, rc=rc)
-!    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-!      line=__LINE__, &
-!      file=__FILE__)) &
-!    return ! bail out
-!    farrayPtr = -999999999999999999.9999999999999 
-!    call ESMF_AttributeSet(field, name="StandardName", value=standardName, rc=rc)
-!    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-!      line=__LINE__, &
-!      file=__FILE__)) &
-!    return ! bail out
-    ! add the Field to the correct glue FieldBundle
-!    if (stateIntent == ESMF_STATEINTENT_IMPORT) then
-!      call ESMF_LogWrite(trim('HYCOM: Add connected import glue field: '//standardName), ESMF_LOGMSG_INFO, rc=rc)
-!      if(rc /= ESMF_SUCCESS) call ESMF_Finalize(rc=rc, endflag=ESMF_END_ABORT)
-      ! import
-!      call ESMF_FieldBundleAdd(glue%importFields, fieldList=(/field/), rc=rc)
-!      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-!        line=__LINE__, &
-!        file=__FILE__)) &
-!        return  ! bail out
-!    else
-!      call ESMF_LogWrite(trim('HYCOM: Add connected export glue field: '//standardName), ESMF_LOGMSG_INFO, rc=rc)
-!      if(rc /= ESMF_SUCCESS) call ESMF_Finalize(rc=rc, endflag=ESMF_END_ABORT)
-      ! export
-!      call ESMF_FieldBundleAdd(glue%exportFields, fieldList=(/field/), rc=rc)
-!      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-!        line=__LINE__, &
-!        file=__FILE__)) &
-!        return  ! bail out
-!    endif
-!  end subroutine
-
-  
-!-----------------------------------------------------------------------------
 
   subroutine HYCOM_GlueFieldsDataImport(glue, rc)
     type(hycom_nuopc_glue_type), intent(inout)  :: glue
@@ -443,7 +325,7 @@ module mod_hycom_nuopc_glue
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-    write(6,*), fieldCount
+    write(6,*) fieldCount
     ! loop over all of the import Fields and pull the data in
     do iField=1, fieldCount
    
@@ -517,20 +399,6 @@ module mod_hycom_nuopc_glue
           impPtr(i,j) = farrayPtr(i,j)
       
     enddo
-
-    ! Rotate the wind stress to local grid    
-!    if (cpl_taux .and. cpl_tauy) then
-!       do j=1,jja
-!          do i=1,ii
-!             imp_taux(i,j,1)= imp_taue(i,j,1) * cos(pang(i,j)) + imp_taun(i,j,1) * sin(pang(i,j))
-!             imp_taux(i,j,2)= imp_taue(i,j,2) * cos(pang(i,j)) + imp_taun(i,j,2) * sin(pang(i,j))
-!             
-!             imp_tauy(i,j,1)= imp_taun(i,j,1) * cos(pang(i,j)) - imp_taue(i,j,1) * sin(pang(i,j))
-!             imp_tauy(i,j,2)= imp_taun(i,j,2) * cos(pang(i,j)) - imp_taue(i,j,2) * sin(pang(i,j))
-!
-!          enddo
-!       enddo
-!    endif
 
     ! transfer SEA-ICE imports into native HYCOM variables
     do j=1,jja
