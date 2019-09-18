@@ -51,6 +51,7 @@ cd $cwd
 unset echo
 module list
 set echo
+make clean
 make hycom_cice_nuopc
 if (${debug} == 'true') then
   mv hycom_cice_nuopc hycom_cice_nuopc_${compiler}_debug
