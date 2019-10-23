@@ -26,6 +26,7 @@ module cice_cap
 !end cice specific
   use ESMF
   use NUOPC
+  use mod_nuopc_options, only: esmf_write_diagnostics
   use NUOPC_Model, &
     model_routine_SS      => SetServices, &
     model_label_SetClock  => label_SetClock, &
@@ -569,63 +570,29 @@ module cice_cap
       file=__FILE__)) &
       return  ! bail out
   call CICE_Import(importState,rc)
-  if(write_diagnostics) then
-    call nuopc_write(state=importState,filenamePrefix='Import_CICE',timeslice=import_slice,rc=rc)
+  if (esmf_write_diagnostics >0) then
+     if (mod(import_slice,esmf_write_diagnostics)==0) then
+        call nuopc_write(state=importState,filenamePrefix='Import_CICE', &
+                       timeslice=import_slice/esmf_write_diagnostics,rc=rc)
+     endif
   endif  ! write_diagnostics
-#ifdef MOVEDTOSUBROUTINE
-    call State_getFldPtr(importState,'sea_surface_temperature',dataPtr_sst,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call State_getFldPtr(importState,'sea_surface_salinity',dataPtr_sss,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call State_getFldPtr(importState,'sea_surface_slope_zonal',dataPtr_sssz,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call State_getFldPtr(importState,'sea_surface_slope_merid',dataPtr_sssm,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call State_getFldPtr(importState,'ocn_current_zonal',dataPtr_ocncz,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call State_getFldPtr(importState,'ocn_current_merid',dataPtr_ocncm,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call State_getFldPtr(importState,'freezing_melting_potential',dataPtr_fmpot,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call State_getFldPtr(importState,'mixed_layer_depth',dataPtr_mld,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    do iblk = 1,nblocks
-       this_block = get_block(blocks_ice(iblk),iblk)
-       ilo = this_block%ilo
-       ihi = this_block%ihi
-       jlo = this_block%jlo
-       jhi = this_block%jhi
-       do j = jlo,jhi
-       do i = ilo,ihi
-          i1 = i - ilo + 1
-          j1 = j - jlo + 1
-          sss    (i,j,iblk) = dataPtr_sss    (i1,j1,iblk)  ! sea surface salinity (maybe for mushy layer)
-          sst    (i,j,iblk) = dataPtr_sst    (i1,j1,iblk) - 273.15  ! sea surface temp (may not be needed?)
-          frzmlt (i,j,iblk) = dataPtr_fmpot  (i1,j1,iblk)
-          ue = dataPtr_ocncz  (i1,j1,iblk)
-          vn = dataPtr_ocncm  (i1,j1,iblk)
-          uocn   (i,j,iblk) = ue*cos(ANGLET(i,j,iblk)) + vn*sin(ANGLET(i,j,iblk))  ! ocean current
-          vocn   (i,j,iblk) = -ue*sin(ANGLET(i,j,iblk)) + vn*cos(ANGLET(i,j,iblk))  ! ocean current
-          ss_tltx(i,j,iblk) = dataPtr_sssz(i1,j1,iblk)*cos(ANGLET(i,j,iblk)) + dataPtr_sssz(i1,j1,iblk)*sin(ANGLET(i,j,iblk))
-          ss_tlty(i,j,iblk) = dataPtr_sssz(i1,j1,iblk)*sin(ANGLET(i,j,iblk)) + dataPtr_sssm(i1,j1,iblk)*cos(ANGLET(i,j,iblk))
-       enddo
-       enddo
-
-       call t2ugrid_vector(ss_tltx)
-       call t2ugrid_vector(ss_tlty)
-    enddo
-#endif
     write(info,*) subname,' --- run phase 2 called --- '
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
     if(profile_memory) call ESMF_VMLogMemInfo("Before CICE_Run")
     call CICE_Run
+
     if(profile_memory) call ESMF_VMLogMemInfo("After CICE_Run")
     write(info,*) subname,' --- run phase 3 called --- '
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
 
     !---- local modifications to coupling fields -----
     call CICE_Export(exportState,rc=rc)
-    call nuopc_write(state=exportState,filenamePrefix='Export_CICE',timeslice=export_slice,rc=rc)
+    if (esmf_write_diagnostics >0) then
+       if (mod(import_slice,esmf_write_diagnostics)==0) then
+           call nuopc_write(state=exportState,filenamePrefix='Export_CICE', &
+                            timeslice=export_slice/esmf_write_diagnostics,rc=rc)
+       endif
+    endif
     !-------------------------------------------------
 
     !call state_diagnose(exportState, 'cice_export', rc)

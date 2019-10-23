@@ -23,7 +23,7 @@ module hycom_cap
 
   use mod_hycom_nuopc_glue
   use mod_cb_arrays_nuopc_glue
-
+  use mod_nuopc_options, only: esmf_write_diagnostics
 
   use ESMF
   use NUOPC
@@ -68,7 +68,6 @@ module hycom_cap
   character(len=2048):: info
 !  integer, parameter, public        :: number_import_fields = 30
 !  integer, parameter, public        :: number_export_fields = 8
-  logical :: write_diagnostics = .true.
   logical :: profile_memory = .true.
 
   !-----------------------------------------------------------------------------
@@ -167,7 +166,7 @@ module hycom_cap
       return  ! bail out
 ! Day 1 sets start time which is fine. Does it need day2???? TO BE CHECKED
     ! Define HYCOM Ref Time
-    call ESMF_TimeSet(hycomRefTime, yy=1901, mm=01, dd=01, calkindflag=ESMF_CALKIND_GREGORIAN, rc=rc)
+    call ESMF_TimeSet(hycomRefTime, yy=1900, mm=12, dd=31, calkindflag=ESMF_CALKIND_GREGORIAN, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
@@ -219,9 +218,9 @@ module hycom_cap
       !restart_write = .true. TAR NEEDED for averaged output.
 
     call ESMF_LOGWRITE("BEFORE HYCOM_INIT", ESMF_LOGMSG_INFO, rc=rc)
-
-    call HYCOM_Init(mpi_Comm, & ! -->> call into HYCOM <<--
-       hycom_start_dtg=l_startTime_r8, hycom_end_dtg=stopTime_r8) !, &
+    ! -->> call into HYCOM <<--
+    call HYCOM_Init(mpi_Comm, & 
+       hycom_start_dtg=l_startTime_r8, hycom_end_dtg=stopTime_r8)
 !tar        restart_write=restart_write)
 
     call ESMF_LOGWRITE("AFTER HYCOM_INIT", ESMF_LOGMSG_INFO, rc=rc)
@@ -243,11 +242,9 @@ module hycom_cap
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
-    return ! bail out
-
+      return
     write(info,*) subname,' --- initialization phase 1 completed --- '
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=rc)
-
       
   end subroutine
 
@@ -342,8 +339,8 @@ module hycom_cap
     rc = ESMF_SUCCESS
 
     do i = 1, nfields
-      write(6,*) field_defs(i)%stdname
-      write(6,*) field_defs(i)%shortname
+      !write(6,*) field_defs(i)%stdname
+      !write(6,*) field_defs(i)%shortname
       if (field_defs(i)%assoc) then
         write(6, *) subname, tag, ' Field ', field_defs(i)%shortname, ':', &
           lbound(field_defs(i)%farrayPtr,1), ubound(field_defs(i)%farrayPtr,1), &
@@ -483,7 +480,12 @@ module hycom_cap
       return  ! bail out
     endTime_r8 = endTime_r8 + ocn_cpl_frq
     ! Import data to HYCOM native structures through glue fields.
-     call nuopc_write(state=importState,filenamePrefix='Import_HYCOM',timeslice=import_slice,rc=rc)
+     if (esmf_write_diagnostics >0) then
+        if (mod(import_slice,esmf_write_diagnostics)==0) then
+          call nuopc_write(state=importState,filenamePrefix='Import_HYCOM', &
+                          timeslice=import_slice/esmf_write_diagnostics,rc=rc)
+        endif
+     endif
      call HYCOM_Import(ImportState,.false.,rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
@@ -533,18 +535,22 @@ module hycom_cap
 !    do
       ! ...on return the end-of-run flags indicate whether HYCOM has advanced
       ! far enough...
-      CALL HYCOM_Run(endtime=endTime_r8,pointer_filename=pointer_filename, restart_write=restart_write) ! -->> call into HYCOM <<--
+!      CALL HYCOM_Run(endtime=real(endTime_r8,4),pointer_filename=pointer_filename, restart_write=restart_write) ! -->> call into HYCOM <<--
 !      if (end_of_run .or. end_of_run_cpl) exit
 !    enddo
-
+       CALL HYCOM_Run(endtime=endTime_r8,restart_write=restart_write)
     ! Export HYCOM native data through the glue fields.
     call HYCOM_export(exportstate,.false.,rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-
-    call nuopc_write(state=exportstate,filenamePrefix='export_HYCOM',timeslice=export_slice,rc=rc)
+     if (esmf_write_diagnostics >0) then
+        if (mod(export_slice,esmf_write_diagnostics)==0) then
+           call nuopc_write(state=exportstate,filenamePrefix='export_HYCOM',&
+                           timeslice=export_slice/esmf_write_diagnostics,rc=rc)
+        endif
+     endif
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
@@ -735,9 +741,6 @@ if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file
       enddo
     enddo
   endif
-  write(6,*) 't3'
-  call flush(6)
-!  stop
   end subroutine
 
   subroutine HYCOM_export(st,initflag,rc)
@@ -771,7 +774,6 @@ if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file
     call State_getFldPtr(st,'freezing_melting_potential',dataPtr_fmpot,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
     cplfrq = nint( ocn_cpl_frq*(86400.0/baclin) )
-    write(6,*) thkfrz, onem, spcifh, baclin, icefrq, g
     if (.not. initFlag) then
        do j=1,jja
          do i=1,ii

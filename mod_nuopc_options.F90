@@ -1,8 +1,10 @@
 module mod_nuopc_options
   implicit none
-  logical,save,public        :: nuopc_restart         ! If true model will restart from 
+  logical,save,public        :: nuopc_restart        ! If true model will restart from 
+  
   integer (4), save, public     :: nuopc_tinterval       ! coupling interval 
   integer(4), dimension(4), save, public :: tstart, tend !year, month, day and hour
+  integer(4), save, public   :: ocn_petCount, ice_petCount, esmf_write_diagnostics
   !======================
   public nuopc_opt
   contains
@@ -16,13 +18,17 @@ module mod_nuopc_options
     character(len = 10) :: nuopc_tstart, nuopc_tend
     integer (4) :: nml_err
     
-    namelist /nuopc/ nuopc_tstart, nuopc_tend,nuopc_tinterval, nuopc_restart
+    namelist /nuopc/ nuopc_tstart, nuopc_tend,nuopc_tinterval, nuopc_restart, &
+                     esmf_write_diagnostics
     !default values
     !  in operational runs at time=0 where the model has to be restarted
-    nuopc_tstart          = '2019031400' ! start time string
-    nuopc_tend            = '2019031500' ! end time string
+    nuopc_tstart          = '2017031500' ! start time string
+    nuopc_tend            = '2017031503' ! end time string
     nuopc_tinterval       = 180 ! Time step in seconds (cpl interval
     nuopc_restart         = .true.  ! Is this a cold start or a restart (true is restart)
+    ocn_petCount          = 9
+    ice_petCount          = 6
+    esmf_write_diagnostics = 0
     ! read namelist
     open (funi, file='nuopc_opt', status='old',iostat=nml_err)
     if (nml_err .ne. 0) then

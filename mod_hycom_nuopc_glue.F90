@@ -325,7 +325,6 @@ module mod_hycom_nuopc_glue
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-    write(6,*) fieldCount
     ! loop over all of the import Fields and pull the data in
     do iField=1, fieldCount
    
@@ -355,13 +354,10 @@ module mod_hycom_nuopc_glue
         return  ! bail out
       ! identify the exact import field by standard name and copy the data
       twoLevel = .false. ! reset
-      write(6,*) 'dada'
-      write(6,*) fieldStdName
       if (fieldStdName == "sea_ice_area_fraction") then
-        write(6,*) "Ever here"
         cpl_sic = .true.
         impPtr => sic_import
-        farrayPtr => sic_import
+        !farrayPtr => sic_import
       elseif (fieldStdName == "downward_x_stress_at_sea_ice_base") then
         cpl_sitx = .true.
         impPtr => sitx_import
@@ -396,7 +392,11 @@ module mod_hycom_nuopc_glue
 ! convert Kg/m^2/s -> m/s as needed below for these two fields
       endif
       ! copy the data into the right import location
-          impPtr(i,j) = farrayPtr(i,j)
+        do j=1,jja
+        do i=1,ii
+            impPtr(i,j) = farrayPtr(i,j)
+        enddo
+        enddo
       
     enddo
 
@@ -438,7 +438,6 @@ module mod_hycom_nuopc_glue
           si_v  (i,j) = 0.0
         endif !covice
       elseif (iceflg.ge.2 .and. icmflg.eq.3) then
-        write(6,*) 'or this b'
         si_c(i,j) =  sic_import(i,j) !Sea Ice Concentration
         if (si_c(i,j).gt.0.0) then
           si_tx(i,j) = -sitx_import(i,j) !Sea Ice X-Stress into ocean
