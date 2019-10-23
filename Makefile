@@ -22,12 +22,8 @@
 #$(error Environment variable ESMFMKFILE was not set.)
 #endif
 
-# include /data/ang/sourcecode/coupled/esmf_v7_1-git/esmf/lib/libg/Unicos.intel.64.mpi.default/esmf.mk 
-# LANLCICEDIR= /data/ang/sourcecode/coupled/build_cice_dmi/intel_dmi_debug/compile
-# HYCOMDIR=/data/ang/sourcecode/coupled/build_hycom_dmi/DMI_intel_debug_coupled
-# UTILINCS        = -I$(LANLCICEDIR) -L$(LANLCICEDIR) -lcice_intel -I$(HYCOMDIR) -L$(HYCOMDIR) -lhycom_intel
 include $(ESMFMKFILE)
-UTILINCS        = -I$(CICE_LIB) -L$(CICE_LIB) -lcice_$(compiler) -I$(HYCOM_LIB) -L$(HYCOM_LIB) -lhycom_$(compiler)
+UTILINCS        = -I$(CICE_LIB) -L$(CICE_LIB) -l$(CICE_FILE) -I$(HYCOM_LIB) -L$(HYCOM_LIB) -l$(HC_FILE)
 ################################################################################
 ################################################################################
 
@@ -48,14 +44,15 @@ UTILINCS        = -I$(CICE_LIB) -L$(CICE_LIB) -lcice_$(compiler) -I$(HYCOM_LIB) 
 
 # -----------------------------------------------------------------------------
 hycom_cice_nuopc: hycom_cice_nuopc.o esm.o cice_cap.o hycom_cap.o conn.o mod_cb_arrays_nuopc_glue.o mod_hycom_nuopc_glue.o mod_nuopc_options.o
-	$(ESMF_F90LINKER) $(ESMF_F90LINKOPTS) $(UTILINCS) $(ESMF_F90LINKPATHS) $(ESMF_F90LINKRPATHS) -o $@ $^ $(ESMF_F90ESMFLINKLIBS) -lcice_${compiler} -lhycom_${compiler}
+	$(ESMF_F90LINKER) $(ESMF_F90LINKOPTS) $(UTILINCS) $(ESMF_F90LINKPATHS) $(ESMF_F90LINKRPATHS) -o $@ $^ $(ESMF_F90ESMFLINKLIBS) -l${CICE_FILE} -l${HC_FILE}
 # module dependencies:
 esmApp.o: esm.o
 esm.o: cice_cap.o hycom_cap.o conn.o mod_nuopc_options.o 
-hycom_cap.o: mod_cb_arrays_nuopc_glue.o mod_hycom_nuopc_glue.o
+hycom_cap.o: mod_cb_arrays_nuopc_glue.o mod_hycom_nuopc_glue.o mod_nuopc_options.o
 mod_hycom_nuopc_glue.o: mod_cb_arrays_nuopc_glue.o
 hycom_cice_nuopc.o: esm.o
-mod_nuopc_options.o:
+mod_nuopc_options.o: mod_nuopc_options.F90
+cice_cap.o: mod_nuopc_options.o
 # -----------------------------------------------------------------------------
 # -----------------------------------------------------------------------------
 .PHONY: dust clean distclean info edit
