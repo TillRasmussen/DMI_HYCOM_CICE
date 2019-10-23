@@ -14,12 +14,6 @@ module ESM
   ! Code that specializes generic ESM Component code.
   !-----------------------------------------------------------------------------
 
-  ! Enabling the followng macro, i.e. setting it to WITHPETLISTS_on, will 
-  ! activate sections of code that demonstrate how
-  ! the ATM and OCN components can run on exclusive sets of PETs. Turning this
-  ! on/off does not affect how the Connector component is specialized.
-#define WITHPETLISTS_on
-
   use ESMF
   use NUOPC
   use NUOPC_Driver, &
@@ -74,7 +68,8 @@ module ESM
 
   subroutine SetModelServices(driver, rc)
     use mod_nuopc_options, only: &
-        tstart, tend, nuopc_tinterval, nuopc_opt
+        tstart, tend, nuopc_tinterval, nuopc_opt, &
+        ice_petCount, ocn_petCount
     type(ESMF_GridComp)  :: driver
     integer, intent(out) :: rc
     
@@ -100,18 +95,14 @@ module ESM
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-    
+    call nuopc_opt()
     ! SetServices for CICE with petList on first half of PETs
-#ifdef WITHPETLISTS_on
-    allocate(petList(petCount/2))
-    do i=1, petCount/2
-      petList(i) = i-1 ! PET labeling goes from 0 to petCount-1
-    enddo
-#endif
-    call NUOPC_DriverAddComp(driver, "CICE", iceSS, &
-#ifdef WITHPETLISTS_on
-      petList=petList, &
-#endif
+     allocate(petList(ice_petCount))
+     do i=1,ice_petCount
+        petList(i)=i-1
+     enddo
+    write (6,*) petCount, ice_petCount
+    call NUOPC_DriverAddComp(driver, "CICE", iceSS,petList=petList, &
       comp=child, rc=rc) !tar comment not sure why comp needs to be a child
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
@@ -122,21 +113,14 @@ module ESM
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-#ifdef WITHPETLISTS_on
     deallocate(petList)
-#endif
-      
+    
     ! SetServices for OCN with petList on second half of PETs
-#ifdef WITHPETLISTS_on
-    allocate(petList(petCount/2))
-    do i=1, petCount/2
-      petList(i) = petCount/2 + i-1 ! PET labeling goes from 0 to petCount-1
+    allocate(petList(ocn_petCount))
+    do i=1,ocn_petCount
+      petList(i)=ice_petCount+i-1
     enddo
-#endif
-    call NUOPC_DriverAddComp(driver, "HYCOM", ocnSS, &
-#ifdef WITHPETLISTS_on
-      petList=petList, &
-#endif
+    call NUOPC_DriverAddComp(driver, "HYCOM", ocnSS, petList=petList, &
       comp=child, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
@@ -147,9 +131,7 @@ module ESM
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-#ifdef WITHPETLISTS_on
     deallocate(petList)
-#endif
     ! SetServices for cice2ocn
     call NUOPC_DriverAddComp(driver, srcCompLabel="CICE", dstCompLabel="HYCOM", &
       compSetServicesRoutine=cplSS, comp=connector, rc=rc)
@@ -175,11 +157,8 @@ module ESM
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-    ! INPUT NEEDED TAR
-    ! PROBABLY FROM MODELS
     ! set the driver clock
-    call nuopc_opt()
-!tar    call ESMF_TimeIntervalSet(timeStep, m=3, rc=rc) ! 3 minute steps
+!    call nuopc_opt()
     call ESMF_TimeIntervalSet(timeStep, s=nuopc_tinterval, rc=rc) ! 3 minute steps
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
@@ -194,7 +173,6 @@ module ESM
       file=__FILE__)) &
       return  ! bail out
 
-!    call ESMF_TimeSet(stopTime, yy=2019, mm=3, dd=14, h=1, m=0, &
     call ESMF_TimeSet(stopTime, yy=tend(1), mm=tend(2), dd=tend(3), h=tend(4), m=0, &
       calkindflag=ESMF_CALKIND_GREGORIAN, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
