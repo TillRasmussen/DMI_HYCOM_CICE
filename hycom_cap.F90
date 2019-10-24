@@ -66,8 +66,6 @@ module hycom_cap
   integer :: fldsFrOcn_num = 0
   type (fld_list_type) :: fldsFrOcn(fldsMax)
   character(len=2048):: info
-!  integer, parameter, public        :: number_import_fields = 30
-!  integer, parameter, public        :: number_export_fields = 8
   logical :: profile_memory = .true.
 
   !-----------------------------------------------------------------------------

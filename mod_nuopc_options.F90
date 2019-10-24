@@ -18,7 +18,7 @@ module mod_nuopc_options
     character(len = 10) :: nuopc_tstart, nuopc_tend
     integer (4) :: nml_err
     
-    namelist /nuopc/ nuopc_tstart, nuopc_tend,nuopc_tinterval, nuopc_restart, &
+    namelist /nuopc_nml/ nuopc_tstart, nuopc_tend,nuopc_tinterval, nuopc_restart, &
                      esmf_write_diagnostics
     !default values
     !  in operational runs at time=0 where the model has to be restarted
@@ -36,7 +36,7 @@ module mod_nuopc_options
         'DMI options are not read.'
     endif
     do while (nml_err == 0)
-      read(funi, nml=nuopc,iostat=nml_err)
+      read(funi, nml=nuopc_nml,iostat=nml_err)
     end do
     close(funi)
     write(6,*) nuopc_tinterval

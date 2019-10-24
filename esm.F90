@@ -165,7 +165,6 @@ module ESM
       file=__FILE__)) &
       return  ! bail out
     
-!    call ESMF_TimeSet(startTime, yy=2019, mm=3, dd=14, h=0, m=0, &
     call ESMF_TimeSet(startTime, yy=tstart(1), mm=tstart(2), dd=tstart(3), h=tstart(4), m=0, &
       calkindflag=ESMF_CALKIND_GREGORIAN, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
