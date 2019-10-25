@@ -8,7 +8,7 @@
 ! Licensed under the University of Illinois-NCSA License.
 !==============================================================================
 ! esm app from https://www.earthsystemcog.org/projects/nuopc/proto_codes/ AtmOcnPetListProto
-#define logerror
+!#define logerror
 ! If turned on all log messages from ESMF will be log. Only used once
 program hycom_cice_nuopc
 
@@ -63,7 +63,6 @@ program hycom_cice_nuopc
     line=__LINE__, &
     file=__FILE__)) &
     call ESMF_Finalize(endflag=ESMF_END_ABORT)
-    
   ! Call Initialize for the earth system Component
   call ESMF_GridCompInitialize(esmComp, userRc=urc, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &

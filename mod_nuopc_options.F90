@@ -19,7 +19,7 @@ module mod_nuopc_options
     integer (4) :: nml_err
     
     namelist /nuopc_nml/ nuopc_tstart, nuopc_tend,nuopc_tinterval, nuopc_restart, &
-                     esmf_write_diagnostics
+                     esmf_write_diagnostics, ocn_petCount, ice_petCount
     !default values
     !  in operational runs at time=0 where the model has to be restarted
     nuopc_tstart          = '2017031500' ! start time string
