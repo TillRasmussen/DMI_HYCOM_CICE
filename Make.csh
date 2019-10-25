@@ -7,8 +7,8 @@ if ( `echo $user | grep dev$` == $user ) set oprdev = dev
 if ( `echo $user | grep opr$` == $user ) set oprdev = opr
 echo $oprdev
 source /opt/modules/default/init/tcsh
-setenv src_dir /netapp/research/tar/esmf/hycom-cice-src/nuopc_dmi/git_hycom_cice_esmf_nuopc/DMI_HYCOM_CICE
-setenv cur_dir ${cwd}
+setenv src_dir ${cwd}
+setenv compiledir /netapp/research/tar/esmf/hycom-cice-src/nuopc_dmi/git_hycom_cice_esmf_nuopc/build_DMI_HYCOM_CICE/
 
 if ($#argv > 0) then
   set compiler = $1
@@ -49,7 +49,6 @@ echo $CICE_FILE
 echo $ESMFMKFILE
 echo $CICE_LIB
 echo $HYCOM_LIB
-cd $cwd
 #
 # --- Usage:  ./Make.com >& Make.log
 #
@@ -60,16 +59,15 @@ set echo
 cd $src_dir
 make hycom_cice_nuopc
 if (${debug} == 'true') then
-  mkdir $cur_dir/nuopc_${compiler}_debug
-  mv *.mod *.o $cur_dir/nuopc_${compiler}_debug/
-  mv hycom_cice_nuopc $cur_dir/nuopc_${compiler}_debug
+  mkdir -p ${compiledir}/nuopc_${compiler}_debug
+  mv *.mod *.o ${compiledir}/nuopc_${compiler}_debug/
+  mv hycom_cice_nuopc ${compiledir}/nuopc_${compiler}_debug
   #mv hycom_cice_nuopc hycom_cice_nuopc_${compiler}_debug
 else
-  mkdir $cur_dir/nuopc_${compiler}
-  mv *.mod *.o $cur_dir/nuopc_${compiler}
-  mv hycom_cice_nuopc $cur_dir/nuopc_${compiler}
+  mkdir ${compiledir}/nuopc_${compiler}
+  mv *.mod *.o ${compiledir}/nuopc_${compiler}
+  mv hycom_cice_nuopc ${compiledir}/nuopc_${compiler}
 #  mv hycom_cice_nuopc hycom_cice_nuopc_${compiler}
 endif
-cd $cur_dir
 unset echo
 
