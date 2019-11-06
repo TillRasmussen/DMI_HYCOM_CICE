@@ -70,8 +70,6 @@ module cice_cap
   logical :: isPresent
   integer :: dbrc     ! temporary debug rc value
 
-!  type(ESMF_Grid), save :: ice_grid_i
-  logical :: write_diagnostics = .true.
   logical :: profile_memory = .true.
 
   contains
@@ -80,7 +78,6 @@ module cice_cap
     type(ESMF_GridComp)  :: gcomp
     integer, intent(out) :: rc
     character(len=*),parameter  :: subname='(cice:SetServices)'
-    !tmpoutwrite(6,*) subname
     rc = ESMF_SUCCESS
 
     ! the NUOPC model component will register the generic methods
@@ -140,7 +137,6 @@ module cice_cap
     type(ESMF_VM)                          :: vm
     integer                                :: mpi_comm
     character(len=*),parameter  :: subname='(cice_cap:InitializeAdvertise)'
-    !tmpoutwrite(6,*) subname
     rc = ESMF_SUCCESS
     call ESMF_VMGetCurrent(vm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -417,7 +413,7 @@ module cice_cap
       return  ! bail out
     write(tmpstr,'(a,2g15.7)') subname//' gridIn corner2 = ',minval(tarray),maxval(tarray)
     call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-
+    !TAR FOR NOW GRIDS ARE ASSUMED IDENTICAL. THIS MAY change at a later state. Not necessary
     gridOut = gridIn ! for now out same as in
 !    ice_grid_i = gridIn
 
@@ -564,7 +560,7 @@ module cice_cap
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-
+!TODO ADD LOGFOUNDERROR
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
@@ -790,7 +786,9 @@ module cice_cap
     !tartmpwrite(6,*) subname
 ! tcraig, don't point directly into cice data YET (last field is optional in interface)
 ! instead, create space for the field when it's "realized".
-    call fld_list_add(fldsToIce_num, fldsToIce, "sea_surface_temperature"         ,"k"   , "will provide")
+!TODO REMOVE FIELDS NOT USED TAR
+! WILL PROVIDE means that field has its own grid. Can be changed to accept grid from outside
+    call fld_list_add(fldsToIce_num, fldsToIce, "sea_surface_temperature"         ,"K"   , "will provide")
     call fld_list_add(fldsToIce_num, fldsToIce, "sea_surface_salinity"            ,"1"   , "will provide")
     call fld_list_add(fldsToIce_num, fldsToIce, "sea_level"                       ,"m"   , "will provide")
     call fld_list_add(fldsToIce_num, fldsToIce, "sea_surface_slope_zonal"         ,"1"   , "will provide")
@@ -833,8 +831,6 @@ module cice_cap
     ! local variables
     integer :: rc
     character(len=*), parameter :: subname='(cice_cap:fld_list_add)'
-    write(6,*) subname
-    write(6,*) num
     ! fill in the new entry
 
     num = num + 1
@@ -868,6 +864,7 @@ module cice_cap
     integer, intent(out) :: rc
     real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sst(:,:,:)
     real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sss(:,:,:)
+    real(kind=ESMF_KIND_R8), pointer  :: dataPtr_ssh(:,:,:)
     real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sssz(:,:,:)
     real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sssm(:,:,:)
     real(kind=ESMF_KIND_R8), pointer  :: dataPtr_ocncz(:,:,:)
@@ -876,13 +873,15 @@ module cice_cap
     real(kind=ESMF_KIND_R8), pointer  :: dataPtr_mld(:,:,:)
     integer                           :: ilo,ihi,jlo,jhi 
     integer                           :: i,j,iblk,n,i1,i2,j1,j2
-    real(kind=ESMF_KIND_R8)           :: ue, vn
+    real(kind=ESMF_KIND_R8)           :: ue, vn, AngT_s 
     type(block)                            :: this_block
      character(len=*),parameter  :: subname='(cice_cap:CICE_Import)'
 
     call State_getFldPtr(st,'sea_surface_temperature',dataPtr_sst,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
     call State_getFldPtr(st,'sea_surface_salinity',dataPtr_sss,rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+    call State_getFldPtr(st,'sea_level',dataPtr_ssh,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
     call State_getFldPtr(st,'sea_surface_slope_zonal',dataPtr_sssz,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
@@ -907,18 +906,22 @@ module cice_cap
           i1 = i - ilo + 1
           j1 = j - jlo + 1
           sss    (i,j,iblk) = dataPtr_sss    (i1,j1,iblk)  ! sea surface salinity (maybe for mushy layer)
-          sst    (i,j,iblk) = dataPtr_sst    (i1,j1,iblk) - 273.15  ! sea surface temp (may not be needed?)
+          sst    (i,j,iblk) = dataPtr_sst    (i1,j1,iblk) - Tffresh  ! sea surface temp (may not be needed?)
+          
           frzmlt (i,j,iblk) = dataPtr_fmpot  (i1,j1,iblk)
           ue = dataPtr_ocncz  (i1,j1,iblk)
           vn = dataPtr_ocncm  (i1,j1,iblk)
-          uocn   (i,j,iblk) = ue*cos(ANGLET(i,j,iblk)) + vn*sin(ANGLET(i,j,iblk))  ! ocean current
-          vocn   (i,j,iblk) = -ue*sin(ANGLET(i,j,iblk)) + vn*cos(ANGLET(i,j,iblk))  ! ocean current
-          ss_tltx(i,j,iblk) = dataPtr_sssz(i1,j1,iblk)*cos(ANGLET(i,j,iblk)) + dataPtr_sssz(i1,j1,iblk)*sin(ANGLET(i,j,iblk))
-          ss_tlty(i,j,iblk) = dataPtr_sssz(i1,j1,iblk)*sin(ANGLET(i,j,iblk)) + dataPtr_sssm(i1,j1,iblk)*cos(ANGLET(i,j,iblk))
+          AngT_s = ANGLET(i,j,iblk)
+          uocn   (i,j,iblk) = ue*cos(AngT_s) + vn*sin(AngT_s)  ! ocean current
+          vocn   (i,j,iblk) = -ue*sin(AngT_s) + vn*cos(AngT_s)  ! ocean current
+          ss_tltx(i,j,iblk) = dataPtr_sssz(i1,j1,iblk)*cos(AngT_s) + dataPtr_sssz(i1,j1,iblk)*sin(AngT_s)
+          ss_tlty(i,j,iblk) = dataPtr_sssz(i1,j1,iblk)*sin(AngT_s) + dataPtr_sssm(i1,j1,iblk)*cos(AngT_s)
        enddo
        enddo
        call t2ugrid_vector(ss_tltx)
        call t2ugrid_vector(ss_tlty)
+       call t2ugrid_vector(uocn)
+       call t2ugrid_vector(vocn)
     enddo
 
   end subroutine
@@ -936,12 +939,15 @@ module cice_cap
     real(ESMF_KIND_R8), pointer :: dataPtr_vice(:,:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_vsno(:,:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_fswthru(:,:,:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_uvel(:,:,:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_vvel(:,:,:)
 
     integer                           :: ilo,ihi,jlo,jhi
     integer                           :: i,j,iblk,n,i1,i2,j1,j2
     real(kind=ESMF_KIND_R8)           :: ui, vj
     type(block)                            :: this_block
     character(len=*),parameter  :: subname='(cice_cap:CICE_Export)'
+!TODO clean up fields
     call State_getFldPtr(st,'ice_mask',dataPtr_mask,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
     call State_getFldPtr(st,'sea_ice_fraction',dataPtr_ifrac,rc=rc)
@@ -964,6 +970,11 @@ module cice_cap
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
     call State_getFldPtr(st,'mean_sw_pen_to_ocn',dataPtr_fswthru,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+    call State_getFldPtr(st,'sea_ice_velocity_zonal',dataPtr_uvel,rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+    call State_getFldPtr(st,'sea_ice_velocity_merid',dataPtr_vvel,rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+
 
 
     write(info, *) subname//' ifrac size :', &
@@ -992,6 +1003,7 @@ module cice_cap
           dataPtr_fsalt    (i1,j1,iblk) = fsalt(i,j,iblk)   ! salt to ocean
           dataPtr_vice    (i1,j1,iblk) = vice(i,j,iblk)   ! sea ice volume
           dataPtr_vsno    (i1,j1,iblk) = vsno(i,j,iblk)   ! snow volume
+          dataPtr_fswthru (i1,j1,iblk) = fswthru(i,j,iblk) ! short wave penetration through ice
           ui = -strocnxT(i,j,iblk)
           vj = -strocnyT(i,j,iblk)
           dataPtr_strocnxT(i1,j1,iblk) = ui*cos(ANGLET(i,j,iblk)) - vj*sin(ANGLET(i,j,iblk))  ! ice ocean stress

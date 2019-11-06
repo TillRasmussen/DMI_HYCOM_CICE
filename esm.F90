@@ -95,13 +95,13 @@ module ESM
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
+! call namelist coupled
     call nuopc_opt()
     ! SetServices for CICE with petList on first half of PETs
      allocate(petList(ice_petCount))
      do i=1,ice_petCount
         petList(i)=i-1
      enddo
-    write (6,*) petCount, ice_petCount, ocn_petCount
     call NUOPC_DriverAddComp(driver, "CICE", iceSS,petList=petList, &
       comp=child, rc=rc) !tar comment not sure why comp needs to be a child
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &

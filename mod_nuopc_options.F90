@@ -28,7 +28,7 @@ module mod_nuopc_options
     nuopc_restart         = .true.  ! Is this a cold start or a restart (true is restart)
     ocn_petCount          = 9
     ice_petCount          = 6
-    esmf_write_diagnostics = 0
+    esmf_write_diagnostics = 0  !number of time steps between netcdf dump. 0 No dump. Set to zero if more than one node
     ! read namelist
     open (funi, file='nuopc_opt', status='old',iostat=nml_err)
     if (nml_err .ne. 0) then

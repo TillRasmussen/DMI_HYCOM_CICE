@@ -76,7 +76,6 @@ module hycom_cap
     type(ESMF_GridComp)  :: gcomp
     integer, intent(out) :: rc
     character(len=*),parameter  :: subname='(ocn:SetServices)'
-    write(6,*) subname
     rc = ESMF_SUCCESS
 
     ! the NUOPC model component will register the generic methods
@@ -142,7 +141,6 @@ module hycom_cap
     logical                     :: restFlag = .false.        ! initial/restart run (F/T)
 
     character(len=*),parameter  :: subname='(HYCOM_cap:InitializeAdvertise)'
-    write(6,*) subname
     rc = ESMF_SUCCESS
     call ESMF_VMGetCurrent(vm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -337,8 +335,6 @@ module hycom_cap
     rc = ESMF_SUCCESS
 
     do i = 1, nfields
-      !write(6,*) field_defs(i)%stdname
-      !write(6,*) field_defs(i)%shortname
       if (field_defs(i)%assoc) then
         write(6, *) subname, tag, ' Field ', field_defs(i)%shortname, ':', &
           lbound(field_defs(i)%farrayPtr,1), ubound(field_defs(i)%farrayPtr,1), &
@@ -545,7 +541,7 @@ module hycom_cap
       return  ! bail out
      if (esmf_write_diagnostics >0) then
         if (mod(export_slice,esmf_write_diagnostics)==0) then
-           call nuopc_write(state=exportstate,filenamePrefix='export_HYCOM',&
+           call nuopc_write(state=exportstate,filenamePrefix='Export_HYCOM',&
                            timeslice=export_slice/esmf_write_diagnostics,rc=rc)
         endif
      endif
@@ -643,7 +639,8 @@ module hycom_cap
   integer i,j
   real(ESMF_KIND_R8), pointer :: dataPtr_sic(:,:),  dataPtr_sit(:,:), dataPtr_sitx(:,:), &
                                  dataPtr_sity(:,:), dataPtr_siqs(:,:), dataPtr_sifs(:,:), &
-                                 dataPtr_sih(:,:)
+                                 dataPtr_sih(:,:), dataPtr_siu(:,:), dataPtr_siv(:,:),   &
+                                 dataPtr_sifw(:,:)
 call state_getFldPtr(st, "sea_ice_fraction",dataPtr_sic,rc=rc)
 call state_getFldPtr(st, "sea_ice_temperature",dataPtr_sit,rc=rc)  
 if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
@@ -651,12 +648,12 @@ if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file
   call state_getFldPtr(st, "mean_ice_volume",dataPtr_sih,rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
   cpl_sih = .true.
-!  call state_getFldPtr(importState, "sea_ice_x_velocity",siu_import,rc=rc)
-!  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-!  cpl_siu = .true.
-!  call state_getFldPtr(importState, "sea_ice_y_velocity",siu_import,rc=rc)
-!  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-!  cpl_siv = .true.
+  call state_getFldPtr(st, "sea_ice_velocity_zonal",siu_import,rc=rc)
+  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+  cpl_siu = .true.
+  call state_getFldPtr(st, "sea_ice_velocity_merid",siv_import,rc=rc)
+  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+  cpl_siv = .true.
   call state_getFldPtr(st, "stress_on_ocn_ice_zonal",dataPtr_sitx,rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
   cpl_sitx = .true.
@@ -669,6 +666,10 @@ if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file
   call state_getFldPtr(st, "mean_salt_rate",dataPtr_sifs,rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
   cpl_sifs = .true.
+  call state_getFldPtr(st,"mean_fresh_water_to_ocean_rate",dataPtr_sifw,rc=rc)
+  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+
+
 
 
 !NOT SURE ABOUT THESE FOUR. At least siu and siv should be used.
@@ -683,23 +684,23 @@ if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file
         covice(i,j) = dataPtr_sic(i,j) !Sea Ice Concentration
         si_c  (i,j) = dataPtr_sic(i,j) !Sea Ice Concentration
         if (covice(i,j).gt.0.0) then
-!          if (frzh(i,j).gt.0.0) then
-!             flxice(i,j) = frzh(i,j)        !Sea Ice Heat Flux Freezing potential
-!          else
-!             flxice(i,j) = sifh_import(i,j) !Sea Ice Heat Flux Melting potential
-!          endif
-          flxice(i,j) = 0.0
-          si_tx (i,j) =  dataPtr_sitx(i,j) !Sea Ice X-Stress into ocean
-          si_ty (i,j) =  dataPtr_sity(i,j) !Sea Ice Y-Stress into ocean
+          !if (frzh(i,j).gt.0.0) then
+          !flxice(i,j) = frzh(i,j)        !Sea Ice Heat Flux Freezing potential
+          !else
+          flxice(i,j) = sifh_import(i,j) !Sea Ice Heat Flux Melting potential
+          !endif
+!          flxice(i,j) = 0.0
+          si_tx (i,j) =  -dataPtr_sitx(i,j) !Sea Ice X-Stress into ocean
+          si_ty (i,j) =  -dataPtr_sity(i,j) !Sea Ice Y-Stress into ocean
           fswice(i,j) =  dataPtr_siqs(i,j) !Solar Heat Flux thru Ice to Ocean already in swflx
           sflice(i,j) =  dataPtr_sifs(i,j)*1.e3 !Ice Freezing/Melting Salt Flux
-          wflice(i,j) =  0.0 !!dataPtr_sifw(i,j) !Ice Water Flux
+          wflice(i,j) =  dataPtr_sifw(i,j) !Ice Water Flux
           temice(i,j) =  dataPtr_sit(i,j) !Sea Ice Temperature
           si_t  (i,j) =  dataPtr_sit(i,j) !Sea Ice Temperature
           thkice(i,j) =  dataPtr_sih(i,j) !Sea Ice Thickness
           si_h  (i,j) =  dataPtr_sih(i,j) !Sea Ice Thickness
-          si_u  (i,j) =   0.0 !siu_import(i,j) !Sea Ice X-Velocity
-          si_v  (i,j) =   0.0 !siv_import(i,j) !Sea Ice Y-Velocity
+          si_u  (i,j) =  siu_import(i,j) !Sea Ice X-Velocity
+          si_v  (i,j) =  siv_import(i,j) !Sea Ice Y-Velocity
         else
           si_tx (i,j) =  0.0 !Sea Ice X-Stress into ocean
           si_ty (i,j) =  0.0 !Sea Ice Y-Stress into ocean
@@ -717,7 +718,7 @@ if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file
        
       enddo
     enddo
-  elseif (iceflg.ge.2 .and. icmflg.ne.3) then
+  elseif (iceflg.ge.2 .and. icmflg.eq.3) then
     do j=13,jja
       do i=13,ii
          si_c(i,j) =  dataPtr_sic(i,j) !Sea Ice Concentration
@@ -751,6 +752,7 @@ if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file
 
   real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sst(:,:)
   real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sss(:,:)
+  real(kind=ESMF_KIND_R8), pointer  :: dataPtr_ssh(:,:)
   real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sssz(:,:)
   real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sssm(:,:)
   real(kind=ESMF_KIND_R8), pointer  :: dataPtr_ocncz(:,:) 
@@ -761,7 +763,7 @@ if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file
   integer :: i,j
   real(kind=ESMF_KIND_R8) :: hfrz, t2f, tfrz, smxl, tmxl, ssfi
   real(kind=ESMF_KIND_R8) :: usur1, usur2, vsur1, vsur2, utot, vtot
-  real(kind=ESMF_KIND_R8) :: ssh_n,ssh_s,ssh_e,ssh_w,dhdx,dhdy
+  real(kind=ESMF_KIND_R8) :: ssh_n,ssh_s,ssh_e,ssh_w,dhdy
   integer                 :: cplfrq
 
 ! do sst and salinity at the same time
@@ -771,6 +773,9 @@ if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
     call State_getFldPtr(st,'freezing_melting_potential',dataPtr_fmpot,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+    call State_getFldPtr(st,'sea_level',dataPtr_ssh,rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+
     cplfrq = nint( ocn_cpl_frq*(86400.0/baclin) )
     if (.not. initFlag) then
        do j=1,jja
@@ -785,6 +790,7 @@ if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file
            ssfi = (tfrz-tmxl)*t2f       !W/m^2 into ocean
            frzh     (i,j) = max(-1000.0,min(1000.0,ssfi)) ! > 0. freezing potential of flxice
            dataPtr_fmpot(i,j) = max(-1000.0,min(1000.0,ssfi))
+           dataPtr_ssh(i,j)   =  srfhgt(i,j)/g   !sshm(i,j)/g
          enddo
        enddo
      else
@@ -792,6 +798,7 @@ if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file
           dataPtr_fmpot(:,:) = 0.
           dataPtr_sst(:,:)   = 0.
           dataPtr_sss(:,:)   = 0.
+          dataPtr_ssh(:,:)   = 0.
      endif
 
     call State_getFldPtr(st,'sea_surface_slope_zonal',dataPtr_sssz,rc=rc)
@@ -861,7 +868,7 @@ if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file
       !nfields = size(fieldList) This should be input
     do i = 1, nfields
       if (.not. NUOPC_FieldDictionaryHasEntry(trim(field_defs(i)%stdname))) then
-         write(6,*) trim(field_defs(i)%stdname), trim(field_defs(i)%canonicalUnits)
+        ! write(6,*) trim(field_defs(i)%stdname), trim(field_defs(i)%canonicalUnits)
          call NUOPC_FieldDictionaryAddEntry( &
               standardName=trim(field_defs(i)%stdname), &
               canonicalUnits=trim(field_defs(i)%canonicalUnits), &
@@ -878,7 +885,7 @@ if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file
              line=__LINE__, &
              file=__FILE__)) &
              return  ! bail out
-         write(6,*) trim(field_defs(i)%stdname), trim(field_defs(i)%shortname) 
+        ! write(6,*) trim(field_defs(i)%stdname), trim(field_defs(i)%shortname) 
          call NUOPC_Advertise(state, &
          standardName=field_defs(i)%stdname, &
          name=field_defs(i)%shortname, &
@@ -896,7 +903,6 @@ if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file
       character(len=*),parameter  :: subname='(hycom_cap:HYCOM_FieldsSetup)'
 
 !--------- import fields to Sea Ice -------------
-      write(6,*) subname
 ! tcraig, don't point directly into cice data YET (last field is optional in interface)
 ! instead, create space for the field when it's "realized".
       call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_surface_temperature"         ,"k"  , "will provide")

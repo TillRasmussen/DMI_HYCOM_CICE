@@ -154,6 +154,7 @@ module CON
       file=__FILE__)) &
       return  ! bail out
     ! compute the first RouteHandle for srcFields->interDstFields (Regrid)
+! TAR NEAREST FIELD point used in remapping
     call ESMF_FieldBundleRegridStore(srcFields, interDstFields, &
       regridmethod=ESMF_REGRIDMETHOD_NEAREST_STOD, &
       unmappedaction=ESMF_UNMAPPEDACTION_IGNORE, routehandle=rh1, rc=rc)

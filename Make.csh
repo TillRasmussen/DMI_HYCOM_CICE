@@ -9,7 +9,6 @@ echo $oprdev
 source /opt/modules/default/init/tcsh
 setenv src_dir ${cwd}
 setenv compiledir /netapp/research/tar/esmf/hycom-cice-src/nuopc_dmi/git_hycom_cice_esmf_nuopc/build_DMI_HYCOM_CICE/
-
 if ($#argv > 0) then
   set compiler = $1
 else
