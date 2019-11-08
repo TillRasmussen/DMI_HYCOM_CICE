@@ -912,8 +912,10 @@ module cice_cap
           ue = dataPtr_ocncz  (i1,j1,iblk)
           vn = dataPtr_ocncm  (i1,j1,iblk)
           AngT_s = ANGLET(i,j,iblk)
-          uocn   (i,j,iblk) = ue*cos(AngT_s) + vn*sin(AngT_s)  ! ocean current
-          vocn   (i,j,iblk) = -ue*sin(AngT_s) + vn*cos(AngT_s)  ! ocean current
+           uocn   (i,j,iblk) = ue*cos(AngT_s) + vn*sin(AngT_s)
+           vocn   (i,j,iblk) = vn*cos(AngT_s) - ue*sin(AngT_s)
+!          uocn   (i,j,iblk) = ue*cos(AngT_s) + vn*sin(-AngT_s)  ! ocean current
+!          vocn   (i,j,iblk) = -ue*sin(-AngT_s) + vn*cos(AngT_s)  ! ocean current
           ss_tltx(i,j,iblk) = dataPtr_sssz(i1,j1,iblk)*cos(AngT_s) + dataPtr_sssz(i1,j1,iblk)*sin(AngT_s)
           ss_tlty(i,j,iblk) = dataPtr_sssz(i1,j1,iblk)*sin(AngT_s) + dataPtr_sssm(i1,j1,iblk)*cos(AngT_s)
        enddo
