@@ -637,6 +637,7 @@ module hycom_cap
   logical                                     :: initFlag
   integer, intent(out) :: rc
   integer i,j
+  real xstress, ystress, pang_rev 
   real(ESMF_KIND_R8), pointer :: dataPtr_sic(:,:),  dataPtr_sit(:,:), dataPtr_sitx(:,:), &
                                  dataPtr_sity(:,:), dataPtr_siqs(:,:), dataPtr_sifs(:,:), &
                                  dataPtr_sih(:,:), dataPtr_siu(:,:), dataPtr_siv(:,:),   &
@@ -690,8 +691,14 @@ if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file
           flxice(i,j) = sifh_import(i,j) !Sea Ice Heat Flux Melting potential
           !endif
 !          flxice(i,j) = 0.0
-          si_tx (i,j) =  -dataPtr_sitx(i,j) !Sea Ice X-Stress into ocean
-          si_ty (i,j) =  -dataPtr_sity(i,j) !Sea Ice Y-Stress into ocean
+!         NEED TO ROTATE SI_TX AND SI_TY
+          U=Up.*cos(pang)-Vp.*sin(pang);
+V=Up.*sin(pang)+Vp.*cos(pang);
+          xstress = -dataPtr_sitx(i,j) ! opposite of what ice sees
+          ystress = -dataPtr_sity(i,j) ! oppostite of what ice sees
+          pang_rev = -pang(i,j)
+          si_tx (i,j) =  xstress*cos(pang_rev) - ystress*sin(pang_rev)
+          si_ty (i,j) =  xstress*sin(pang_rev) + ystress*cos(pang_rev)
           fswice(i,j) =  dataPtr_siqs(i,j) !Solar Heat Flux thru Ice to Ocean already in swflx
           sflice(i,j) =  dataPtr_sifs(i,j)*1.e3 !Ice Freezing/Melting Salt Flux
           wflice(i,j) =  dataPtr_sifw(i,j) !Ice Water Flux
@@ -699,8 +706,6 @@ if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file
           si_t  (i,j) =  dataPtr_sit(i,j) !Sea Ice Temperature
           thkice(i,j) =  dataPtr_sih(i,j) !Sea Ice Thickness
           si_h  (i,j) =  dataPtr_sih(i,j) !Sea Ice Thickness
-          si_u  (i,j) =  siu_import(i,j) !Sea Ice X-Velocity
-          si_v  (i,j) =  siv_import(i,j) !Sea Ice Y-Velocity
         else
           si_tx (i,j) =  0.0 !Sea Ice X-Stress into ocean
           si_ty (i,j) =  0.0 !Sea Ice Y-Stress into ocean
@@ -712,8 +717,6 @@ if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file
           si_t  (i,j) =  0.0 !Sea Ice Temperature
           thkice(i,j) =  0.0 !Sea Ice Thickness
           si_h  (i,j) =  0.0 !Sea Ice Thickness
-          si_u  (i,j) =  0.0 !Sea Ice X-Velocity
-          si_v  (i,j) =  0.0 !Sea Ice Y-Velocity
         endif
        
       enddo
@@ -727,8 +730,6 @@ if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file
           si_ty(i,j) = -dataPtr_sity(i,j) !Sea Ice Y-Stress into ocean
           si_h (i,j) =  dataptr_sih(i,j) !Sea Ice Thickness
           si_t (i,j) =  dataPtr_sit(i,j) !Sea Ice Temperature
-          si_u (i,j) =   0.0 !siu_import(i,j) !Sea Ice X-Velocity
-          si_v (i,j) =   0.0 !siv_import(i,j) !Sea Ice Y-Velocity
         else
           si_tx(i,j) = 0.0
           si_ty(i,j) = 0.0

@@ -809,8 +809,6 @@ module cice_cap
     call fld_list_add(fldsFrIce_num, fldsFrIce, "net_heat_flx_to_ocn"             ,"1"   , "will provide") 
     call fld_list_add(fldsFrIce_num, fldsFrIce, "mean_ice_volume"                 ,"1"   , "will provide")
     call fld_list_add(fldsFrIce_num, fldsFrIce, "mean_snow_volume"                ,"1"   , "will provide")
-    call fld_list_add(fldsFrIce_num, fldsFrIce, "sea_ice_velocity_zonal"          ,"m/s" , "will provide")
-    call fld_list_add(fldsFrIce_num, fldsFrIce, "sea_ice_velocity_merid"          ,"m/s" , "will provide")
 
   end subroutine CICE_FieldsSetup
 
@@ -912,12 +910,12 @@ module cice_cap
           ue = dataPtr_ocncz  (i1,j1,iblk)
           vn = dataPtr_ocncm  (i1,j1,iblk)
           AngT_s = ANGLET(i,j,iblk)
-           uocn   (i,j,iblk) = ue*cos(AngT_s) + vn*sin(AngT_s)
-           vocn   (i,j,iblk) = vn*cos(AngT_s) - ue*sin(AngT_s)
-!          uocn   (i,j,iblk) = ue*cos(AngT_s) + vn*sin(-AngT_s)  ! ocean current
-!          vocn   (i,j,iblk) = -ue*sin(-AngT_s) + vn*cos(AngT_s)  ! ocean current
-          ss_tltx(i,j,iblk) = dataPtr_sssz(i1,j1,iblk)*cos(AngT_s) + dataPtr_sssz(i1,j1,iblk)*sin(AngT_s)
-          ss_tlty(i,j,iblk) = dataPtr_sssz(i1,j1,iblk)*sin(AngT_s) + dataPtr_sssm(i1,j1,iblk)*cos(AngT_s)
+          uocn   (i,j,iblk) = ue*cos(AngT_s) - vn*sin(AngT_s)
+          vocn   (i,j,iblk) = ue*sin(AngT_s) + vn*cos(AngT_s)
+          ue = dataPtr_sssz  (i1,j1,iblk)
+          vn = dataPtr_sssm  (i1,j1,iblk)
+          ss_tltx(i,j,iblk) = ue*cos(AngT_s) - vn*sin(AngT_s)
+          ss_tlty(i,j,iblk) = ue*sin(AngT_s) + vn*cos(AngT_s)
        enddo
        enddo
        call t2ugrid_vector(ss_tltx)
@@ -972,12 +970,6 @@ module cice_cap
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
     call State_getFldPtr(st,'mean_sw_pen_to_ocn',dataPtr_fswthru,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call State_getFldPtr(st,'sea_ice_velocity_zonal',dataPtr_uvel,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call State_getFldPtr(st,'sea_ice_velocity_merid',dataPtr_vvel,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-
-
 
     write(info, *) subname//' ifrac size :', &
       lbound(dataPtr_ifrac,1), ubound(dataPtr_ifrac,1), &
@@ -1006,10 +998,11 @@ module cice_cap
           dataPtr_vice    (i1,j1,iblk) = vice(i,j,iblk)   ! sea ice volume
           dataPtr_vsno    (i1,j1,iblk) = vsno(i,j,iblk)   ! snow volume
           dataPtr_fswthru (i1,j1,iblk) = fswthru(i,j,iblk) ! short wave penetration through ice
-          ui = -strocnxT(i,j,iblk)
-          vj = -strocnyT(i,j,iblk)
-          dataPtr_strocnxT(i1,j1,iblk) = ui*cos(ANGLET(i,j,iblk)) - vj*sin(ANGLET(i,j,iblk))  ! ice ocean stress
-          dataPtr_strocnyT(i1,j1,iblk) = ui*sin(ANGLET(i,j,iblk)) + vj*cos(ANGLET(i,j,iblk))  ! ice ocean stress
+          ui = strocnxT(i,j,iblk)
+          vj = strocnyT(i,j,iblk)
+          angT = ANGLET(i,j,iblk)
+          dataPtr_strocnxT(i1,j1,iblk) =  ui*cos(-angT) + vj*sin(angT)  ! ice ocean stress
+          dataPtr_strocnyT(i1,j1,iblk) = -ui*sin(angT)  + vj*cos(-angT)  ! ice ocean stress
        enddo
        enddo
     enddo
