@@ -640,21 +640,15 @@ module hycom_cap
   real xstress, ystress, pang_rev 
   real(ESMF_KIND_R8), pointer :: dataPtr_sic(:,:),  dataPtr_sit(:,:), dataPtr_sitx(:,:), &
                                  dataPtr_sity(:,:), dataPtr_siqs(:,:), dataPtr_sifs(:,:), &
-                                 dataPtr_sih(:,:), dataPtr_siu(:,:), dataPtr_siv(:,:),   &
-                                 dataPtr_sifw(:,:)
-call state_getFldPtr(st, "sea_ice_fraction",dataPtr_sic,rc=rc)
-call state_getFldPtr(st, "sea_ice_temperature",dataPtr_sit,rc=rc)  
-if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+                                 dataPtr_sih(:,:), dataPtr_sifw(:,:)
+  call state_getFldPtr(st, "sea_ice_fraction",dataPtr_sic,rc=rc)
+  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+  call state_getFldPtr(st, "sea_ice_temperature",dataPtr_sit,rc=rc)  
+  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
   cpl_sit=.true.
   call state_getFldPtr(st, "mean_ice_volume",dataPtr_sih,rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
   cpl_sih = .true.
-  call state_getFldPtr(st, "sea_ice_velocity_zonal",siu_import,rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-  cpl_siu = .true.
-  call state_getFldPtr(st, "sea_ice_velocity_merid",siv_import,rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-  cpl_siv = .true.
   call state_getFldPtr(st, "stress_on_ocn_ice_zonal",dataPtr_sitx,rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
   cpl_sitx = .true.
@@ -925,8 +919,6 @@ if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file
       call fld_list_add(fldsToOcn_num, fldsToOcn, "net_heat_flx_to_ocn"             ,"1"   , "will provide") !
       call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_ice_volume"                 ,"1"   , "will provide")
       call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_snow_volume"                ,"1"   , "will provide")
-      call fld_list_add(fldsToOcn_num, fldsToOcn, "sea_ice_velocity_zonal"          ,"m/s" , "will provide")
-      call fld_list_add(fldsToOcn_num, fldsToOcn, "sea_ice_velocity_merid"          ,"m/s" , "will provide")
 
 
   end subroutine HYCOM_FieldsSetup

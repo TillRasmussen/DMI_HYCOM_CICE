@@ -939,12 +939,11 @@ module cice_cap
     real(ESMF_KIND_R8), pointer :: dataPtr_vice(:,:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_vsno(:,:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_fswthru(:,:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_uvel(:,:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_vvel(:,:,:)
 
     integer                           :: ilo,ihi,jlo,jhi
     integer                           :: i,j,iblk,n,i1,i2,j1,j2
-    real(kind=ESMF_KIND_R8)           :: ui, vj
+    real(kind=ESMF_KIND_R8)           :: ui, vj, angT
+    
     type(block)                            :: this_block
     character(len=*),parameter  :: subname='(cice_cap:CICE_Export)'
 !TODO clean up fields
