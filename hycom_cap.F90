@@ -676,8 +676,6 @@ if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file
 !NOT SURE ABOUT THESE FOUR. At least siu and siv should be used.
 !        public cpl_sifh,    sifh_import   ! Ice Freezing/Melting Heat Flux
 !        public cpl_sifw,    sifw_import   ! Ice Net Water Flux
-!        public cpl_siu,     siu_import    ! Sea Ice X-Velocity
-!        public cpl_siv,     siv_import    ! Sea Ice Y-Velocity
 !ALSO FLXICE
   if (iceflg.ge.2 .and. icmflg.ne.3) then
     do j=1,jja
@@ -691,9 +689,6 @@ if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file
           flxice(i,j) = sifh_import(i,j) !Sea Ice Heat Flux Melting potential
           !endif
 !          flxice(i,j) = 0.0
-!         NEED TO ROTATE SI_TX AND SI_TY
-          U=Up.*cos(pang)-Vp.*sin(pang);
-V=Up.*sin(pang)+Vp.*cos(pang);
           xstress = -dataPtr_sitx(i,j) ! opposite of what ice sees
           ystress = -dataPtr_sity(i,j) ! oppostite of what ice sees
           pang_rev = -pang(i,j)
@@ -726,8 +721,11 @@ V=Up.*sin(pang)+Vp.*cos(pang);
       do i=13,ii
          si_c(i,j) =  dataPtr_sic(i,j) !Sea Ice Concentration
         if (si_c(i,j).gt.0.0) then
-          si_tx(i,j) = -dataPtr_sitx(i,j) !Sea Ice X-Stress into ocean
-          si_ty(i,j) = -dataPtr_sity(i,j) !Sea Ice Y-Stress into ocean
+          xstress = -dataPtr_sitx(i,j) ! opposite of what ice sees
+          ystress = -dataPtr_sity(i,j) ! oppostite of what ice sees
+          pang_rev = -pang(i,j)
+          si_tx (i,j) =  xstress*cos(pang_rev) - ystress*sin(pang_rev)
+          si_ty (i,j) =  xstress*sin(pang_rev) + ystress*cos(pang_rev)
           si_h (i,j) =  dataptr_sih(i,j) !Sea Ice Thickness
           si_t (i,j) =  dataPtr_sit(i,j) !Sea Ice Temperature
         else
