@@ -912,7 +912,6 @@ module hycom_cap
       call fld_list_add(fldsToOcn_num, fldsToOcn, "stress_on_ocn_ice_zonal"         ,"1"   , "will provide") !
       call fld_list_add(fldsToOcn_num, fldsToOCn, "stress_on_ocn_ice_merid"         ,"1"   , "will provide") !
       call fld_list_add(fldsToOcn_num, fldsToOcn, "sea_ice_temperature"             ,"1"   , "will provide") !
-      call fld_list_add(fldsToOcn_num, fldsToOcn, "ice_mask"                        ,"1"   , "will provide")
       call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_sw_pen_to_ocn"              ,"1"   , "will provide") !
       call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_fresh_water_to_ocean_rate" ,"1"   , "will provide")!
       call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_salt_rate"                  ,"1"   , "will provide") !
