@@ -802,7 +802,7 @@ module cice_cap
     call fld_list_add(fldsFrIce_num, fldsFrIce, "stress_on_ocn_ice_zonal"         ,"1"   , "will provide") 
     call fld_list_add(fldsFrIce_num, fldsFrIce, "stress_on_ocn_ice_merid"         ,"1"   , "will provide") 
     call fld_list_add(fldsFrIce_num, fldsFrIce, "sea_ice_temperature"             ,"1"   , "will provide") 
-    call fld_list_add(fldsFrIce_num, fldsFrIce, "ice_mask"                        ,"1"   , "will provide")
+!    call fld_list_add(fldsFrIce_num, fldsFrIce, "ice_mask"                        ,"1"   , "will provide")
     call fld_list_add(fldsFrIce_num, fldsFrIce, "mean_sw_pen_to_ocn"              ,"1"   , "will provide") 
     call fld_list_add(fldsFrIce_num, fldsFrIce, "mean_fresh_water_to_ocean_rate" ,"1"   ,  "will provide")
     call fld_list_add(fldsFrIce_num, fldsFrIce, "mean_salt_rate"                  ,"1"   , "will provide") 
@@ -928,7 +928,7 @@ module cice_cap
   subroutine CICE_Export(st,rc)
   type(ESMF_State)     :: st
   integer, intent(out) :: rc
-    real(ESMF_KIND_R8), pointer :: dataPtr_mask(:,:,:)
+!    real(ESMF_KIND_R8), pointer :: dataPtr_mask(:,:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_ifrac(:,:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_itemp(:,:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_strocnxT(:,:,:)
@@ -947,8 +947,8 @@ module cice_cap
     type(block)                            :: this_block
     character(len=*),parameter  :: subname='(cice_cap:CICE_Export)'
 !TODO clean up fields
-    call State_getFldPtr(st,'ice_mask',dataPtr_mask,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+!    call State_getFldPtr(st,'ice_mask',dataPtr_mask,rc=rc)
+!    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
     call State_getFldPtr(st,'sea_ice_fraction',dataPtr_ifrac,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
     call State_getFldPtr(st,'sea_ice_temperature',dataPtr_itemp,rc=rc)
@@ -977,7 +977,7 @@ module cice_cap
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
    dataPtr_ifrac = 0._ESMF_KIND_R8
     dataPtr_itemp = 0._ESMF_KIND_R8
-    dataPtr_mask = 0._ESMF_KIND_R8
+!    dataPtr_mask = 0._ESMF_KIND_R8
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
    do iblk = 1,nblocks
        this_block = get_block(blocks_ice(iblk),iblk)
@@ -989,7 +989,7 @@ module cice_cap
        do i = ilo,ihi
           i1 = i - ilo + 1
           j1 = j - jlo + 1
-          if (hm(i,j,iblk) > 0.5) dataPtr_mask(i1,j1,iblk) = 1._ESMF_KIND_R8
+!          if (hm(i,j,iblk) > 0.5) dataPtr_mask(i1,j1,iblk) = 1._ESMF_KIND_R8
           dataPtr_ifrac   (i1,j1,iblk) = aice(i,j,iblk)   ! ice fraction (0-1)
           dataPtr_fhocn    (i1,j1,iblk) = fhocn(i,j,iblk)   ! heat exchange with ocean
           dataPtr_fresh    (i1,j1,iblk) = fresh(i,j,iblk)   ! fresh water to ocean
@@ -1005,8 +1005,8 @@ module cice_cap
        enddo
        enddo
     enddo
-    write(tmpstr,*) subname//' mask = ',minval(dataPtr_mask),maxval(dataPtr_mask)
-    call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+!    write(tmpstr,*) subname//' mask = ',minval(dataPtr_mask),maxval(dataPtr_mask)
+!    call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
 
 
    
