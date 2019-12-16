@@ -8,7 +8,7 @@
 ! Licensed under the University of Illinois-NCSA License.
 !==============================================================================
 ! esm app from https://www.earthsystemcog.org/projects/nuopc/proto_codes/ AtmOcnPetListProto
-#define logerror
+!#define logerror
 ! If turned on all log messages from ESMF will be log. Only used once
 program hycom_cice_nuopc
 

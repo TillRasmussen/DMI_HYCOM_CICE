@@ -234,15 +234,16 @@ module cice_cap
        deBlockList(2,1,n) = j_glob(jlo)
        deBlockList(2,2,n) = j_glob(jhi)
        call ice_distributionGetBlockLoc(distrb_info,n,peID,locID)
-       petMap(n) = peID - 1
-       write(tmpstr,'(a,2i8)') subname//' IDs  = ',n,peID
+       petMap(n) = max(0,peID - 1)
+       write(tmpstr,'(a,3i8)') subname//' IDs  = ',n,peID, locID
        call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
        write(tmpstr,'(a,3i8)') subname//' iglo = ',n,deBlockList(1,1,n),deBlockList(1,2,n)
        call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
        write(tmpstr,'(a,3i8)') subname//' jglo = ',n,deBlockList(2,1,n),deBlockList(2,2,n)
        call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
     enddo
-!    delayout = ESMF_DELayoutCreate(petMap, rc=rc)
+!!!TAR ADDED 141119
+    delayout = ESMF_DELayoutCreate(petMap, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
 
 !tarnotglobal    allocate(connectionList(2))
@@ -266,7 +267,7 @@ module cice_cap
 !        indexflag = ESMF_INDEX_DELOCAL, &
         deBlockList=deBlockList, &
 !        deLabelList=deLabelList, &
-!needed?        delayout=delayout, &
+!         delayout=delayout, &
 !tarnotglobal        connectionList=connectionList, &
         rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
@@ -326,6 +327,8 @@ module cice_cap
        call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
        if (lbnd(1) /= 1 .or. lbnd(2) /= 1 .or. ubnd(1) /= ihi-ilo+1 .or. ubnd(2) /= jhi-jlo+1) then
           write(tmpstr,'(a,5i8)') subname//' iblk bnds ERROR '
+          call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, line=__LINE__, file=__FILE__, rc=dbrc)
+          write(tmpstr,'(a,4i8)') subname//' iblk center bnds 2',ihi, ilo, jhi,jlo 
           call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, line=__LINE__, file=__FILE__, rc=dbrc)
           rc = ESMF_FAILURE
           return
