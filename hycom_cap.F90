@@ -48,8 +48,8 @@ module hycom_cap
     type(InternalStateStruct), pointer :: wrap
   end type
 
-  integer  :: import_slice = 1
-  integer  :: export_slice = 1  
+  integer  :: import_slice = 0
+  integer  :: export_slice = 0  
 
   type fld_list_type
     character(len=64) :: stdname
@@ -811,8 +811,8 @@ module hycom_cap
 ! Results now differs from when the calculation was done here
             dataPtr_sssz(i,j)  = dhde(i,j)
             dataPtr_sssm(i,j)  = dhdn(i,j)
-            dataPtr_ocncz(i,j) = umxl(i,j)
-            dataPtr_ocncm(i,j) = vmxl(i,j)
+            dataPtr_ocncz(i,j) = uml(i,j)
+            dataPtr_ocncm(i,j) = vml(i,j)
          enddo
        enddo
     else

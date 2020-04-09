@@ -24,8 +24,6 @@
         public scux     ! grid cell area at the p pts
         public scvy     ! grid cell area at the p pts
 
-        public cpl_implicit  ! time step scheme
-        
         ! import from SEA-ICE
         public cpl_sic,     sic_import    ! Sea Ice Concentration
         public cpl_sitx,    sitx_import   ! Sea Ice X-Stress
@@ -49,8 +47,8 @@
         public pang           ! ANGLET
         public dhde           ! eastward ssh slope
         public dhdn           ! northward ssh slope
-        public umxl           ! eastward u velocity
-        public vmxl           ! northward v velocity
+        public uml           ! eastward u velocity
+        public vml           ! northward v velocity
         public tml           ! export T average over one coupling sequence
         public sml           ! export S average over one coupling sequence
         public sshm           ! export SSH average over one coupling sequence
