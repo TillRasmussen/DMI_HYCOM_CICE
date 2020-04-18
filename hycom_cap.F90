@@ -132,8 +132,8 @@ module hycom_cap
     type(ESMF_Clock)     :: clock
     integer, intent(out) :: rc
     ! Local Variables
-    type(ESMF_VM)                          :: vm
-    integer                                :: mpi_comm
+    type(ESMF_VM)               :: vm
+    integer                     :: mpi_comm, me, npes
     TYPE(ESMF_Time)             :: startTime, stopTime, hycomRefTime, currTime
     TYPE(ESMF_TimeInterval)     :: interval,timeStep
     real(ESMF_KIND_R8)          :: startTime_r8, stopTime_r8, l_startTime_r8
@@ -143,6 +143,7 @@ module hycom_cap
     character(len=*),parameter  :: subname='(HYCOM_cap:InitializeAdvertise)'
     rc = ESMF_SUCCESS
     call ESMF_VMGetCurrent(vm, rc=rc)
+
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
@@ -180,7 +181,12 @@ module hycom_cap
       file=__FILE__)) &
       return  ! bail out
 
-    print *, " HYCOM_INIT -->> startTime_r8=", startTime_r8, "stopTime_r8=", stopTime_r8
+    call ESMF_VMGet(vm,localPet=me,petCount=npes)
+    if (me==0) then
+      print *, "DMI_CPL: HYCOM_INIT -->> startTime_r8=", startTime_r8
+      print *, "DMI_CPL:                  stopTime_r8=", stopTime_r8
+    endif
+
     ! get coupling frequency from ocean clock for 1st export
      call ESMF_ClockGet(clock, timeStep=timeStep, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -637,7 +643,7 @@ module hycom_cap
   logical                                     :: initFlag
   integer, intent(out) :: rc
   integer i,j
-  real xstress, ystress, pang_rev 
+  real(8) :: xstress, ystress, pang_rev 
   real(ESMF_KIND_R8), pointer :: dataPtr_sic(:,:),  dataPtr_sit(:,:), dataPtr_sitx(:,:), &
                                  dataPtr_sity(:,:), dataPtr_siqs(:,:), dataPtr_sifs(:,:), &
                                  dataPtr_sih(:,:), dataPtr_sifw(:,:)
@@ -678,14 +684,14 @@ module hycom_cap
         si_c  (i,j) = dataPtr_sic(i,j) !Sea Ice Concentration
         if (covice(i,j).gt.0.0) then
           !if (frzh(i,j).gt.0.0) then
-          !flxice(i,j) = frzh(i,j)        !Sea Ice Heat Flux Freezing potential
+          !flxice(i,j) = frzh(i,j)         !Sea Ice Heat Flux Freezing potential
           !else
-          flxice(i,j) = sifh_import(i,j) !Sea Ice Heat Flux Melting potential
+          flxice(i,j) =  sifh_import(i,j) !Sea Ice Heat Flux Melting potential
           !endif
 !          flxice(i,j) = 0.0
-          xstress = -dataPtr_sitx(i,j) ! opposite of what ice sees
-          ystress = -dataPtr_sity(i,j) ! oppostite of what ice sees
-          pang_rev = -pang(i,j)
+          xstress     = -dataPtr_sitx(i,j) ! opposite of what ice sees
+          ystress     = -dataPtr_sity(i,j) ! oppostite of what ice sees
+          pang_rev    = -pang(i,j)        ! Reverse angle
           si_tx (i,j) =  xstress*cos(pang_rev) - ystress*sin(pang_rev)
           si_ty (i,j) =  xstress*sin(pang_rev) + ystress*cos(pang_rev)
           fswice(i,j) =  dataPtr_siqs(i,j) !Solar Heat Flux thru Ice to Ocean already in swflx
@@ -699,7 +705,7 @@ module hycom_cap
           si_tx (i,j) =  0.0 !Sea Ice X-Stress into ocean
           si_ty (i,j) =  0.0 !Sea Ice Y-Stress into ocean
           fswice(i,j) =  0.0 !Solar Heat Flux thru Ice to Ocean already in swflx
-          flxice(i,j) =  0.0 ! freeze/melt potential
+          flxice(i,j) =  0.0 !freeze/melt potential
           sflice(i,j) =  0.0 !Ice Freezing/Melting Salt Flux
           wflice(i,j) =  0.0 !Ice Water Flux
           temice(i,j) =  0.0 !Sea Ice Temperature
@@ -713,13 +719,13 @@ module hycom_cap
   elseif (iceflg.ge.2 .and. icmflg.eq.3) then
     do j=13,jja
       do i=13,ii
-         si_c(i,j) =  dataPtr_sic(i,j) !Sea Ice Concentration
+        si_c(i,j) = dataPtr_sic(i,j) !Sea Ice Concentration
         if (si_c(i,j).gt.0.0) then
-          xstress = -dataPtr_sitx(i,j) ! opposite of what ice sees
-          ystress = -dataPtr_sity(i,j) ! oppostite of what ice sees
-          pang_rev = -pang(i,j)
-          si_tx (i,j) =  xstress*cos(pang_rev) - ystress*sin(pang_rev)
-          si_ty (i,j) =  xstress*sin(pang_rev) + ystress*cos(pang_rev)
+          xstress    = -dataPtr_sitx(i,j) ! opposite of what ice sees
+          ystress    = -dataPtr_sity(i,j) ! oppostite of what ice sees
+          pang_rev   = -pang(i,j)         ! Reverse Angle
+          si_tx(i,j) =  xstress*cos(pang_rev) - ystress*sin(pang_rev)
+          si_ty(i,j) =  xstress*sin(pang_rev) + ystress*cos(pang_rev)
           si_h (i,j) =  dataptr_sih(i,j) !Sea Ice Thickness
           si_t (i,j) =  dataPtr_sit(i,j) !Sea Ice Temperature
         else
@@ -851,44 +857,48 @@ module hycom_cap
       integer,          intent(out),     optional   :: rc
 
       ! local variables
-      integer                                       :: i
+      type(ESMF_VM)                                 :: vm
+      integer                                       :: i, me, npes
       character(80)                                 :: shortName
       character(80)                                 :: stdName
 
-
+      call ESMF_VMGetGlobal(vm=vm, rc=rc)
+      call ESMF_VMGet (vm, localPet=me, petCount=npes)
       rc = ESMF_SUCCESS
 
       !nfields = size(fieldList) This should be input
-    do i = 1, nfields
-      if (.not. NUOPC_FieldDictionaryHasEntry(trim(field_defs(i)%stdname))) then
-        ! write(6,*) trim(field_defs(i)%stdname), trim(field_defs(i)%canonicalUnits)
-         call NUOPC_FieldDictionaryAddEntry( &
-              standardName=trim(field_defs(i)%stdname), &
-              canonicalUnits=trim(field_defs(i)%canonicalUnits), &
-              rc=rc)
-         if   (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-              line=__LINE__, &
-              file=__FILE__)) &
-              return  ! bail out
-      endif
+      if (me==0) write(6,*)'DMI_CPL: Number of HYCOM fields = ',nfields
+      do i = 1, nfields
+        if (.not. NUOPC_FieldDictionaryHasEntry(trim(field_defs(i)%stdname))) then
+          if (me==0) write(6,*) &
+            'DMI_CPL: ',trim(field_defs(i)%stdname),' : ',trim(field_defs(i)%canonicalUnits)
+          call NUOPC_FieldDictionaryAddEntry( &
+            standardName=trim(field_defs(i)%stdname), &
+            canonicalUnits=trim(field_defs(i)%canonicalUnits), &
+            rc=rc)
+          if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+            line=__LINE__, &
+            file=__FILE__)) &
+            return  ! bail out
+        endif
 
-         call flush(6)
-         call ESMF_LogWrite('Advertise: '//trim(field_defs(i)%stdname), ESMF_LOGMSG_INFO, rc=rc)
-         if  (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-             line=__LINE__, &
-             file=__FILE__)) &
-             return  ! bail out
-        ! write(6,*) trim(field_defs(i)%stdname), trim(field_defs(i)%shortname) 
-         call NUOPC_Advertise(state, &
-         standardName=field_defs(i)%stdname, &
-         name=field_defs(i)%shortname, &
-         rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, &
-        file=__FILE__)) &
-        return  ! bail out
+        call flush(6)
+        call ESMF_LogWrite('Advertise: '//trim(field_defs(i)%stdname), ESMF_LOGMSG_INFO, rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
+       ! write(6,*) trim(field_defs(i)%stdname), trim(field_defs(i)%shortname) 
+        call NUOPC_Advertise(state, &
+          standardName=field_defs(i)%stdname, &
+          name=field_defs(i)%shortname, &
+          rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
 
-    enddo
+      enddo
 
       end subroutine
 

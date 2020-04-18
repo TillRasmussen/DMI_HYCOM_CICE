@@ -519,14 +519,17 @@ module cice_cap
 !    real(ESMF_KIND_R8)                     :: sigma_r, sigma_l, sigma_c
     type(ESMF_StateItem_Flag)              :: itemType
     character(240)              :: msgString
+    type(ESMF_VM) :: vm
+    integer       :: me, npes
     character(len=*),parameter  :: subname='(cice_cap:ModelAdvance)'
+
     rc = ESMF_SUCCESS
     if(profile_memory) call ESMF_VMLogMemInfo("Entering CICE Model_ADVANCE: ")
     write(info,*) subname,' --- run phase 1 called --- '
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
     import_slice = import_slice + 1
     export_slice = export_slice + 1
-    
+
     ! query the Component for its clock, importState and exportState
     call NUOPC_ModelGet(gcomp, modelClock=clock, importState=importState, &
       exportState=exportState, rc=rc)
@@ -543,38 +546,34 @@ module cice_cap
     ! multiple calls to the ModelAdvance() routine. Every time the currTime
     ! will come in by one internal timeStep advanced. This goes until the
     ! stopTime of the internal Clock has been reached.
-    
-    call ESMF_ClockPrint(clock, options="currTime", &
-      preString="------>Advancing CICE from: ", rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    
+
+    call ESMF_VMGetGlobal(vm=vm, rc=rc)
+    call ESMF_VMGet (vm, localPet=me, petCount=npes)
+    if (me==0) call ESMF_ClockPrint(clock, options="currTime", &
+                     preString="DMI_CPL: -->Advancing CICE from: ", rc=rc)
+
     call ESMF_ClockGet(clock, currTime=currTime, timeStep=timeStep, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-    
-    call ESMF_TimePrint(currTime + timeStep, &
-      preString="--------------------------------> to: ", rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
+
+!MHRI    if (me==1) call ESMF_TimePrint(currTime + timeStep, &
+!MHRI                     preString="DMI_CPL: ------------------> to: ", rc=rc)
+
 !TODO ADD LOGFOUNDERROR
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-  call CICE_Import(importState,rc)
-  if (esmf_write_diagnostics >0) then
-     if (mod(import_slice,esmf_write_diagnostics)==0) then
-        call nuopc_write(state=importState,filenamePrefix='Import_CICE', &
-                       timeslice=import_slice/esmf_write_diagnostics,rc=rc)
-     endif
-  endif  ! write_diagnostics
+
+    call CICE_Import(importState,rc)
+    if (esmf_write_diagnostics >0) then
+       if (mod(import_slice,esmf_write_diagnostics)==0) then
+          call nuopc_write(state=importState,filenamePrefix='Import_CICE', &
+                         timeslice=import_slice/esmf_write_diagnostics,rc=rc)
+       endif
+    endif  ! write_diagnostics
     write(info,*) subname,' --- run phase 2 called --- '
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
     if(profile_memory) call ESMF_VMLogMemInfo("Before CICE_Run")
@@ -641,23 +640,26 @@ module cice_cap
     integer,intent(in)                          :: nfields
     type(fld_list_type), intent(inout)          :: field_defs(:)
     integer, intent(inout)                      :: rc
-
-    integer                                     :: i
+    type(ESMF_VM)                               :: vm
+    integer                                     :: i, me, npes
     character(len=*),parameter  :: subname='(cice_cap:CICE_AdvertiseFields)'
 
+    call ESMF_VMGetGlobal(vm=vm, rc=rc)
+    call ESMF_VMGet (vm, localPet=me, petCount=npes)
     rc = ESMF_SUCCESS
-    !write(6,*) nfields
+    if (me==0) write(6,*)'DMI_CPL: Number of CICE fields = ',nfields
     do i = 1, nfields
       if (.not. NUOPC_FieldDictionaryHasEntry(trim(field_defs(i)%stdname))) then
-         write(6,*) trim(field_defs(i)%stdname), trim(field_defs(i)%canonicalUnits)
-         call NUOPC_FieldDictionaryAddEntry( &
-              standardName=trim(field_defs(i)%stdname), &
-              canonicalUnits=trim(field_defs(i)%canonicalUnits), &
-              rc=rc)
-         if   (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-              line=__LINE__, &
-              file=__FILE__)) &
-              return  ! bail out
+        if (me==0) write(6,*) &
+          'DMI_CPL: ',trim(field_defs(i)%stdname),' : ',trim(field_defs(i)%canonicalUnits)
+        call NUOPC_FieldDictionaryAddEntry( &
+          standardName=trim(field_defs(i)%stdname), &
+          canonicalUnits=trim(field_defs(i)%canonicalUnits), &
+          rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
       endif
 
       call ESMF_LogWrite('Advertise: '//trim(field_defs(i)%stdname), ESMF_LOGMSG_INFO, rc=rc)
