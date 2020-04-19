@@ -124,7 +124,7 @@ module cice_cap
       file=__FILE__)) &
       return  ! bail out
 
-  end subroutine
+  end subroutine SetServices
 
   !-----------------------------------------------------------------------------
 
@@ -166,7 +166,7 @@ module cice_cap
     write(info,*) subname,' --- initialization phase 1 completed --- '
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
 
-  end subroutine
+  end subroutine InitializeAdvertise
   
   !-----------------------------------------------------------------------------
 
@@ -446,7 +446,7 @@ module cice_cap
     write(info,*) subname,' --- initialization phase 2 completed --- '
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, line=__LINE__, file=__FILE__, rc=dbrc)
 
-  end subroutine
+  end subroutine InitializeRealize
   
   !-----------------------------------------------------------------------------
 
@@ -494,7 +494,7 @@ module cice_cap
       file=__FILE__)) &
       return  ! bail out
     
-  end subroutine
+  end subroutine SetClock
 
   !-----------------------------------------------------------------------------
 
@@ -596,8 +596,10 @@ module cice_cap
     !call state_diagnose(exportState, 'cice_export', rc)
     write(info,*) subname,' --- run phase 4 called --- ',rc
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
-   if(profile_memory) call ESMF_VMLogMemInfo("Leaving CICE Model_ADVANCE: ")
-  end subroutine 
+    if(profile_memory) call ESMF_VMLogMemInfo("Leaving CICE Model_ADVANCE: ")
+
+    call flush(6)
+  end subroutine ModelAdvance
 
   subroutine cice_model_finalize(gcomp, rc)
 
@@ -929,7 +931,9 @@ module cice_cap
        call t2ugrid_vector(vocn)
     enddo
 
-  end subroutine
+  end subroutine CICE_Import
+
+  !-----------------------------------------------------------------------------
   subroutine CICE_Export(st,rc)
   type(ESMF_State)     :: st
   integer, intent(out) :: rc
@@ -976,22 +980,22 @@ module cice_cap
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
 
     write(info, *) subname//' ifrac size :', &
-      lbound(dataPtr_ifrac,1), ubound(dataPtr_ifrac,1), &
-      lbound(dataPtr_ifrac,2), ubound(dataPtr_ifrac,2), &
-      lbound(dataPtr_ifrac,3), ubound(dataPtr_ifrac,3)
+    lbound(dataPtr_ifrac,1), ubound(dataPtr_ifrac,1), &
+    lbound(dataPtr_ifrac,2), ubound(dataPtr_ifrac,2), &
+    lbound(dataPtr_ifrac,3), ubound(dataPtr_ifrac,3)
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
-   dataPtr_ifrac = 0._ESMF_KIND_R8
+    dataPtr_ifrac = 0._ESMF_KIND_R8
     dataPtr_itemp = 0._ESMF_KIND_R8
 !    dataPtr_mask = 0._ESMF_KIND_R8
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
-   do iblk = 1,nblocks
-       this_block = get_block(blocks_ice(iblk),iblk)
-       ilo = this_block%ilo
-       ihi = this_block%ihi
-       jlo = this_block%jlo
-       jhi = this_block%jhi
-       do j = jlo,jhi
-       do i = ilo,ihi
+    do iblk = 1,nblocks
+      this_block = get_block(blocks_ice(iblk),iblk)
+      ilo = this_block%ilo
+      ihi = this_block%ihi
+      jlo = this_block%jlo
+      jhi = this_block%jhi
+      do j = jlo,jhi
+        do i = ilo,ihi
           i1 = i - ilo + 1
           j1 = j - jlo + 1
 !          if (hm(i,j,iblk) > 0.5) dataPtr_mask(i1,j1,iblk) = 1._ESMF_KIND_R8
@@ -1007,14 +1011,12 @@ module cice_cap
           angT = ANGLET(i,j,iblk)
           dataPtr_strocnxT(i1,j1,iblk) =  ui*cos(-angT) + vj*sin(angT)  ! ice ocean stress
           dataPtr_strocnyT(i1,j1,iblk) = -ui*sin(angT)  + vj*cos(-angT)  ! ice ocean stress
-       enddo
-       enddo
+        enddo
+      enddo
     enddo
 !    write(tmpstr,*) subname//' mask = ',minval(dataPtr_mask),maxval(dataPtr_mask)
 !    call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
 
-
-   
-  end subroutine
+  end subroutine CICE_Export
 
 end module cice_cap
