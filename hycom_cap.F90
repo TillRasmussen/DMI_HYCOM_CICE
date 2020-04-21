@@ -4,22 +4,8 @@ module hycom_cap
   ! OCN Component for CESM-BETA; use ESMF and  NUOPC 
   !-----------------------------------------------------------------------------
 
-
-
-
-
-
-
-
-
-
-
-
-
-
   use MOD_HYCOM, only : HYCOM_Init, HYCOM_Run, HYCOM_Final, &
     end_of_run, end_of_run_cpl
-
 
   use mod_hycom_nuopc_glue
   use mod_cb_arrays_nuopc_glue
@@ -67,6 +53,7 @@ module hycom_cap
   type (fld_list_type) :: fldsFrOcn(fldsMax)
   character(len=2048):: info
   logical :: profile_memory = .true.
+  real(ESMF_KIND_R8)          :: ocn_cpl_frq
 
   !-----------------------------------------------------------------------------
   contains
@@ -122,7 +109,7 @@ module hycom_cap
       file=__FILE__)) &
       return  ! bail out
 
-  end subroutine
+  end subroutine SetServices
 
   !-----------------------------------------------------------------------------
 
@@ -132,8 +119,8 @@ module hycom_cap
     type(ESMF_Clock)     :: clock
     integer, intent(out) :: rc
     ! Local Variables
-    type(ESMF_VM)                          :: vm
-    integer                                :: mpi_comm
+    type(ESMF_VM)               :: vm
+    integer                     :: mpi_comm, me, npes
     TYPE(ESMF_Time)             :: startTime, stopTime, hycomRefTime, currTime
     TYPE(ESMF_TimeInterval)     :: interval,timeStep
     real(ESMF_KIND_R8)          :: startTime_r8, stopTime_r8, l_startTime_r8
@@ -143,6 +130,7 @@ module hycom_cap
     character(len=*),parameter  :: subname='(HYCOM_cap:InitializeAdvertise)'
     rc = ESMF_SUCCESS
     call ESMF_VMGetCurrent(vm, rc=rc)
+
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
@@ -180,7 +168,12 @@ module hycom_cap
       file=__FILE__)) &
       return  ! bail out
 
-    print *, " HYCOM_INIT -->> startTime_r8=", startTime_r8, "stopTime_r8=", stopTime_r8
+    call ESMF_VMGet(vm,localPet=me,petCount=npes)
+    if (me==0) then
+      print *, "DMI_CPL: HYCOM_INIT -->> startTime_r8=", startTime_r8
+      print *, "DMI_CPL:                  stopTime_r8=", stopTime_r8
+    endif
+
     ! get coupling frequency from ocean clock for 1st export
      call ESMF_ClockGet(clock, timeStep=timeStep, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -242,7 +235,7 @@ module hycom_cap
     write(info,*) subname,' --- initialization phase 1 completed --- '
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=rc)
       
-  end subroutine
+  end subroutine InitializeAdvertise
 
   !-----------------------------------------------------------------------------
 
@@ -315,7 +308,7 @@ module hycom_cap
       file=__FILE__)) &
       return  ! bail out
     
-  end subroutine
+  end subroutine InitializeRealize
 
   subroutine HYCOM_RealizeFields(state, grid, nfields, field_defs, tag, rc)
 
@@ -385,11 +378,10 @@ module hycom_cap
     enddo
 
   end subroutine HYCOM_RealizeFields
-
   
   !-----------------------------------------------------------------------------
 
-  SUBROUTINE ModelAdvance(gcomp, rc)
+  subroutine ModelAdvance(gcomp, rc)
     type(ESMF_GridComp)  :: gcomp
     integer, intent(out) :: rc
     
@@ -549,7 +541,7 @@ module hycom_cap
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-  end subroutine
+  end subroutine ModelAdvance
 
   !-----------------------------------------------------------------------------
 
@@ -585,6 +577,7 @@ module hycom_cap
 !  end subroutine
 
 ! HYCOM uses clock as days from
+  !-----------------------------------------------------------------------------
   subroutine SetClock(gcomp, rc)
     type(ESMF_GridComp)  :: gcomp
     integer, intent(out) :: rc
@@ -628,136 +621,133 @@ module hycom_cap
       file=__FILE__)) &
       return  ! bail out
 
-  end subroutine
+  end subroutine SetClock
+
+  !-----------------------------------------------------------------------------
+
   subroutine HYCOM_Import(st,initflag,rc)
-  use mod_hycom_nuopc_glue, only: jja
-  use mod_dimensions, only: ii
+    use mod_hycom_nuopc_glue, only: jja
+    use mod_dimensions, only: ii
 !TILL need to change
-  type(ESMF_State)     :: st 
-  logical                                     :: initFlag
-  integer, intent(out) :: rc
-  integer i,j
-  real xstress, ystress, pang_rev 
-  real(ESMF_KIND_R8), pointer :: dataPtr_sic(:,:),  dataPtr_sit(:,:), dataPtr_sitx(:,:), &
-                                 dataPtr_sity(:,:), dataPtr_siqs(:,:), dataPtr_sifs(:,:), &
-                                 dataPtr_sih(:,:), dataPtr_sifw(:,:)
-  call state_getFldPtr(st, "sea_ice_fraction",dataPtr_sic,rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-  call state_getFldPtr(st, "sea_ice_temperature",dataPtr_sit,rc=rc)  
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-  cpl_sit=.true.
-  call state_getFldPtr(st, "mean_ice_volume",dataPtr_sih,rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-  cpl_sih = .true.
-  call state_getFldPtr(st, "stress_on_ocn_ice_zonal",dataPtr_sitx,rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-  cpl_sitx = .true.
-  call state_getFldPtr(st, "stress_on_ocn_ice_merid",dataPtr_sity,rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-  cpl_sity = .true.
-  call state_getFldPtr(st, "mean_sw_pen_to_ocn",dataPtr_siqs,rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-  cpl_siqs = .true.
-  call state_getFldPtr(st, "mean_salt_rate",dataPtr_sifs,rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-  cpl_sifs = .true.
-  call state_getFldPtr(st,"mean_fresh_water_to_ocean_rate",dataPtr_sifw,rc=rc)
-  if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-
-
-
+    type(ESMF_State)     :: st 
+    logical              :: initFlag
+    integer, intent(out) :: rc
+    integer i,j
+    real(8) :: xstress, ystress, pang_rev 
+    real(ESMF_KIND_R8), pointer :: dataPtr_sic(:,:),  dataPtr_sit(:,:), dataPtr_sitx(:,:), &
+                                   dataPtr_sity(:,:), dataPtr_siqs(:,:), dataPtr_sifs(:,:), &
+                                   dataPtr_sih(:,:), dataPtr_sifw(:,:)
+    call state_getFldPtr(st, "sea_ice_fraction",dataPtr_sic,rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+    call state_getFldPtr(st, "sea_ice_temperature",dataPtr_sit,rc=rc)  
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+    call state_getFldPtr(st, "mean_ice_volume",dataPtr_sih,rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+    call state_getFldPtr(st, "stress_on_ocn_ice_zonal",dataPtr_sitx,rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+    call state_getFldPtr(st, "stress_on_ocn_ice_merid",dataPtr_sity,rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+    call state_getFldPtr(st, "mean_sw_pen_to_ocn",dataPtr_siqs,rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+    call state_getFldPtr(st, "mean_salt_rate",dataPtr_sifs,rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+    call state_getFldPtr(st,"mean_fresh_water_to_ocean_rate",dataPtr_sifw,rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
 
 !NOT SURE ABOUT THESE FOUR. At least siu and siv should be used.
 !        public cpl_sifh,    sifh_import   ! Ice Freezing/Melting Heat Flux
 !        public cpl_sifw,    sifw_import   ! Ice Net Water Flux
 !ALSO FLXICE
-  if (iceflg.ge.2 .and. icmflg.ne.3) then
-    do j=1,jja
-      do i=1,ii
-        covice(i,j) = dataPtr_sic(i,j) !Sea Ice Concentration
-        si_c  (i,j) = dataPtr_sic(i,j) !Sea Ice Concentration
-        if (covice(i,j).gt.0.0) then
-          !if (frzh(i,j).gt.0.0) then
-          !flxice(i,j) = frzh(i,j)        !Sea Ice Heat Flux Freezing potential
-          !else
-          flxice(i,j) = sifh_import(i,j) !Sea Ice Heat Flux Melting potential
-          !endif
-!          flxice(i,j) = 0.0
-          xstress = -dataPtr_sitx(i,j) ! opposite of what ice sees
-          ystress = -dataPtr_sity(i,j) ! oppostite of what ice sees
-          pang_rev = -pang(i,j)
-          si_tx (i,j) =  xstress*cos(pang_rev) - ystress*sin(pang_rev)
-          si_ty (i,j) =  xstress*sin(pang_rev) + ystress*cos(pang_rev)
-          fswice(i,j) =  dataPtr_siqs(i,j) !Solar Heat Flux thru Ice to Ocean already in swflx
-          sflice(i,j) =  dataPtr_sifs(i,j)*1.e3 !Ice Freezing/Melting Salt Flux
-          wflice(i,j) =  dataPtr_sifw(i,j) !Ice Water Flux
-          temice(i,j) =  dataPtr_sit(i,j) !Sea Ice Temperature
-          si_t  (i,j) =  dataPtr_sit(i,j) !Sea Ice Temperature
-          thkice(i,j) =  dataPtr_sih(i,j) !Sea Ice Thickness
-          si_h  (i,j) =  dataPtr_sih(i,j) !Sea Ice Thickness
-        else
-          si_tx (i,j) =  0.0 !Sea Ice X-Stress into ocean
-          si_ty (i,j) =  0.0 !Sea Ice Y-Stress into ocean
-          fswice(i,j) =  0.0 !Solar Heat Flux thru Ice to Ocean already in swflx
-          flxice(i,j) =  0.0 ! freeze/melt potential
-          sflice(i,j) =  0.0 !Ice Freezing/Melting Salt Flux
-          wflice(i,j) =  0.0 !Ice Water Flux
-          temice(i,j) =  0.0 !Sea Ice Temperature
-          si_t  (i,j) =  0.0 !Sea Ice Temperature
-          thkice(i,j) =  0.0 !Sea Ice Thickness
-          si_h  (i,j) =  0.0 !Sea Ice Thickness
-        endif
-       
+    if (iceflg.ge.2 .and. icmflg.ne.3) then
+      do j=1,jja
+        do i=1,ii
+          covice(i,j) = dataPtr_sic(i,j) !Sea Ice Concentration
+          si_c  (i,j) = dataPtr_sic(i,j) !Sea Ice Concentration
+          if (covice(i,j).gt.0.0) then
+! THIS MOST LIKELY NEEDS SOMETHING
+            !if (frzh(i,j).gt.0.0) then
+            !flxice(i,j) = frzh(i,j)         !Sea Ice Heat Flux Freezing potential
+            !else
+            flxice(i,j) =  0.d0 !sifh_import(i,j) !Sea Ice Heat Flux Melting potential
+            !endif
+!            flxice(i,j) = 0.0
+            xstress     = -dataPtr_sitx(i,j) ! opposite of what ice sees
+            ystress     = -dataPtr_sity(i,j) ! oppostite of what ice sees
+            pang_rev    = -pang(i,j)        ! Reverse angle
+            si_tx (i,j) =  xstress*cos(pang_rev) - ystress*sin(pang_rev)
+            si_ty (i,j) =  xstress*sin(pang_rev) + ystress*cos(pang_rev)
+            fswice(i,j) =  dataPtr_siqs(i,j) !Solar Heat Flux thru Ice to Ocean already in swflx
+            sflice(i,j) =  dataPtr_sifs(i,j)*1.e3 !Ice Freezing/Melting Salt Flux
+            wflice(i,j) =  dataPtr_sifw(i,j) !Ice Water Flux
+            temice(i,j) =  dataPtr_sit(i,j) !Sea Ice Temperature
+            si_t  (i,j) =  dataPtr_sit(i,j) !Sea Ice Temperature
+            thkice(i,j) =  dataPtr_sih(i,j) !Sea Ice Thickness
+            si_h  (i,j) =  dataPtr_sih(i,j) !Sea Ice Thickness
+          else
+            si_tx (i,j) =  0.0 !Sea Ice X-Stress into ocean
+            si_ty (i,j) =  0.0 !Sea Ice Y-Stress into ocean
+            fswice(i,j) =  0.0 !Solar Heat Flux thru Ice to Ocean already in swflx
+            flxice(i,j) =  0.0 !freeze/melt potential
+            sflice(i,j) =  0.0 !Ice Freezing/Melting Salt Flux
+            wflice(i,j) =  0.0 !Ice Water Flux
+            temice(i,j) =  0.0 !Sea Ice Temperature
+            si_t  (i,j) =  0.0 !Sea Ice Temperature
+            thkice(i,j) =  0.0 !Sea Ice Thickness
+            si_h  (i,j) =  0.0 !Sea Ice Thickness
+          endif
+         
+        enddo
       enddo
-    enddo
-  elseif (iceflg.ge.2 .and. icmflg.eq.3) then
-    do j=13,jja
-      do i=13,ii
-         si_c(i,j) =  dataPtr_sic(i,j) !Sea Ice Concentration
-        if (si_c(i,j).gt.0.0) then
-          xstress = -dataPtr_sitx(i,j) ! opposite of what ice sees
-          ystress = -dataPtr_sity(i,j) ! oppostite of what ice sees
-          pang_rev = -pang(i,j)
-          si_tx (i,j) =  xstress*cos(pang_rev) - ystress*sin(pang_rev)
-          si_ty (i,j) =  xstress*sin(pang_rev) + ystress*cos(pang_rev)
-          si_h (i,j) =  dataptr_sih(i,j) !Sea Ice Thickness
-          si_t (i,j) =  dataPtr_sit(i,j) !Sea Ice Temperature
-        else
-          si_tx(i,j) = 0.0
-          si_ty(i,j) = 0.0
-          si_h (i,j) = 0.0
-          si_t (i,j) = 0.0
-          si_u (i,j) = 0.0
-          si_v (i,j) = 0.0
-        endif !covice
+    elseif (iceflg.ge.2 .and. icmflg.eq.3) then
+      do j=13,jja
+        do i=13,ii
+          si_c(i,j) = dataPtr_sic(i,j) !Sea Ice Concentration
+          if (si_c(i,j).gt.0.0) then
+            xstress    = -dataPtr_sitx(i,j) ! opposite of what ice sees
+            ystress    = -dataPtr_sity(i,j) ! oppostite of what ice sees
+            pang_rev   = -pang(i,j)         ! Reverse Angle
+            si_tx(i,j) =  xstress*cos(pang_rev) - ystress*sin(pang_rev)
+            si_ty(i,j) =  xstress*sin(pang_rev) + ystress*cos(pang_rev)
+            si_h (i,j) =  dataptr_sih(i,j) !Sea Ice Thickness
+            si_t (i,j) =  dataPtr_sit(i,j) !Sea Ice Temperature
+          else
+            si_tx(i,j) = 0.0
+            si_ty(i,j) = 0.0
+            si_h (i,j) = 0.0
+            si_t (i,j) = 0.0
+            si_u (i,j) = 0.0
+            si_v (i,j) = 0.0
+          endif !covice
+        enddo
       enddo
-    enddo
-  endif
-  end subroutine
+    endif
+  end subroutine HYCOM_Import
+
+  !-----------------------------------------------------------------------------
 
   subroutine HYCOM_export(st,initflag,rc)
     use mod_hycom_nuopc_glue, only: jja
     use mod_dimensions, only: ii
 
-  type(ESMF_State)     :: st
-  logical              :: initflag
-  integer, intent(out) :: rc
+    type(ESMF_State)     :: st
+    logical              :: initflag
+    integer, intent(out) :: rc
 
-  real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sst(:,:)
-  real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sss(:,:)
-  real(kind=ESMF_KIND_R8), pointer  :: dataPtr_ssh(:,:)
-  real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sssz(:,:)
-  real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sssm(:,:)
-  real(kind=ESMF_KIND_R8), pointer  :: dataPtr_ocncz(:,:) 
-  real(kind=ESMF_KIND_R8), pointer  :: dataPtr_ocncm(:,:)
-  real(kind=ESMF_KIND_R8), pointer  :: dataPtr_fmpot(:,:)
-  real(kind=ESMF_KIND_R8), pointer  :: dataPtr_mld(:,:)
+    real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sst(:,:)
+    real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sss(:,:)
+    real(kind=ESMF_KIND_R8), pointer  :: dataPtr_ssh(:,:)
+    real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sssz(:,:)
+    real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sssm(:,:)
+    real(kind=ESMF_KIND_R8), pointer  :: dataPtr_ocncz(:,:) 
+    real(kind=ESMF_KIND_R8), pointer  :: dataPtr_ocncm(:,:)
+    real(kind=ESMF_KIND_R8), pointer  :: dataPtr_fmpot(:,:)
+    real(kind=ESMF_KIND_R8), pointer  :: dataPtr_mld(:,:)
 
-  integer :: i,j
-  real(kind=ESMF_KIND_R8) :: hfrz, t2f, tfrz, smxl, tmxl, ssfi
-  real(kind=ESMF_KIND_R8) :: usur1, usur2, vsur1, vsur2, utot, vtot
-  real(kind=ESMF_KIND_R8) :: ssh_n,ssh_s,ssh_e,ssh_w,dhdy
-  integer                 :: cplfrq
+    integer :: i,j
+    real(kind=ESMF_KIND_R8) :: hfrz, t2f, tfrz, smxl, tmxl, ssfi
+    real(kind=ESMF_KIND_R8) :: usur1, usur2, vsur1, vsur2, utot, vtot
+    real(kind=ESMF_KIND_R8) :: ssh_n,ssh_s,ssh_e,ssh_w,dhdy
+    integer                 :: cplfrq
 
 ! do sst and salinity at the same time
     call State_getFldPtr(st,'sea_surface_temperature',dataPtr_sst,rc=rc)
@@ -771,28 +761,28 @@ module hycom_cap
 
     cplfrq = nint( ocn_cpl_frq*(86400.0/baclin) )
     if (.not. initFlag) then
-       do j=1,jja
-         do i=1,ii
-           tmxl = 0.5*(temp(i,j,1,2)+temp(i,j,1,1))
-           smxl = 0.5*(saln(i,j,1,2)+saln(i,j,1,1))
-           dataPtr_sst(i,j) = tmxl+273.15d0  ! construct SST [K]
-           dataPtr_sss(i,j) = smxl           ! construct SSS
-           hfrz = min( thkfrz*onem, dpbl(i,j) )
-           t2f  = (spcifh*hfrz)/(baclin*icefrq*g)
-           tfrz = tfrz_0 + smxl*tfrz_s  !salinity dependent freezing point
-           ssfi = (tfrz-tmxl)*t2f       !W/m^2 into ocean
-           frzh     (i,j) = max(-1000.0,min(1000.0,ssfi)) ! > 0. freezing potential of flxice
-           dataPtr_fmpot(i,j) = max(-1000.0,min(1000.0,ssfi))
-           dataPtr_ssh(i,j)   =  srfhgt(i,j)/g   !sshm(i,j)/g
-         enddo
-       enddo
-     else
-          frzh     (:,:)     = 0.
-          dataPtr_fmpot(:,:) = 0.
-          dataPtr_sst(:,:)   = 0.
-          dataPtr_sss(:,:)   = 0.
-          dataPtr_ssh(:,:)   = 0.
-     endif
+      do j=1,jja
+        do i=1,ii
+          tmxl = 0.5*(temp(i,j,1,2)+temp(i,j,1,1))
+          smxl = 0.5*(saln(i,j,1,2)+saln(i,j,1,1))
+          dataPtr_sst(i,j) = tmxl+273.15d0  ! construct SST [K]
+          dataPtr_sss(i,j) = smxl           ! construct SSS
+          hfrz = min( thkfrz*onem, dpbl(i,j) )
+          t2f  = (spcifh*hfrz)/(baclin*icefrq*g)
+          tfrz = tfrz_0 + smxl*tfrz_s  !salinity dependent freezing point
+          ssfi = (tfrz-tmxl)*t2f       !W/m^2 into ocean
+          frzh     (i,j) = max(-1000.0,min(1000.0,ssfi)) ! > 0. freezing potential of flxice
+          dataPtr_fmpot(i,j) = max(-1000.0,min(1000.0,ssfi))
+          dataPtr_ssh(i,j)   =  srfhgt(i,j)/g   !sshm(i,j)/g
+        enddo
+      enddo
+    else
+      frzh(:,:)          = 0.
+      dataPtr_fmpot(:,:) = 0.
+      dataPtr_sst(:,:)   = 0.
+      dataPtr_sss(:,:)   = 0.
+      dataPtr_ssh(:,:)   = 0.
+    endif
 
     call State_getFldPtr(st,'sea_surface_slope_zonal',dataPtr_sssz,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
@@ -839,86 +829,89 @@ module hycom_cap
          enddo
         enddo
      endif
-   end subroutine
+   end subroutine HYCOM_export
   !-----------------------------------------------------------------------------
   ! placeholder for the lookup function
-      subroutine HYCOM_AdvertiseFields(state,nfields, field_defs, tag, rc)
+   subroutine HYCOM_AdvertiseFields(state,nfields, field_defs, tag, rc)
 
-      type(ESMF_State), intent(inout)               :: state
-      integer,intent(in)                            :: nfields
-      type(fld_list_type), intent(inout)          :: field_defs(:)
-      character(len=*), intent(in)                  :: tag
-      integer,          intent(out),     optional   :: rc
+   type(ESMF_State), intent(inout)   :: state
+   integer,intent(in)                :: nfields
+   type(fld_list_type), intent(inout):: field_defs(:)
+   character(len=*), intent(in)      :: tag
+   integer, intent(out), optional    :: rc
 
-      ! local variables
-      integer                                       :: i
-      character(80)                                 :: shortName
-      character(80)                                 :: stdName
+   ! local variables
+   type(ESMF_VM) :: vm
+   integer       :: i, me, npes
+   character(80) :: shortName
+   character(80) :: stdName
 
+   call ESMF_VMGetGlobal(vm=vm, rc=rc)
+   call ESMF_VMGet (vm, localPet=me, petCount=npes)
+   rc = ESMF_SUCCESS
 
-      rc = ESMF_SUCCESS
-
-      !nfields = size(fieldList) This should be input
-    do i = 1, nfields
-      if (.not. NUOPC_FieldDictionaryHasEntry(trim(field_defs(i)%stdname))) then
-        ! write(6,*) trim(field_defs(i)%stdname), trim(field_defs(i)%canonicalUnits)
-         call NUOPC_FieldDictionaryAddEntry( &
-              standardName=trim(field_defs(i)%stdname), &
-              canonicalUnits=trim(field_defs(i)%canonicalUnits), &
-              rc=rc)
-         if   (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-              line=__LINE__, &
-              file=__FILE__)) &
-              return  ! bail out
-      endif
-
-         call flush(6)
-         call ESMF_LogWrite('Advertise: '//trim(field_defs(i)%stdname), ESMF_LOGMSG_INFO, rc=rc)
-         if  (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-             line=__LINE__, &
-             file=__FILE__)) &
-             return  ! bail out
-        ! write(6,*) trim(field_defs(i)%stdname), trim(field_defs(i)%shortname) 
-         call NUOPC_Advertise(state, &
-         standardName=field_defs(i)%stdname, &
-         name=field_defs(i)%shortname, &
+   !nfields = size(fieldList) This should be input
+   if (me==0) write(6,*)'DMI_CPL: Number of HYCOM fields = ',nfields
+   do i = 1, nfields
+     if (.not. NUOPC_FieldDictionaryHasEntry(trim(field_defs(i)%stdname))) then
+       if (me==0) write(6,*) &
+         'DMI_CPL: ',trim(field_defs(i)%stdname),' : ',trim(field_defs(i)%canonicalUnits)
+       call NUOPC_FieldDictionaryAddEntry( &
+         standardName=trim(field_defs(i)%stdname), &
+         canonicalUnits=trim(field_defs(i)%canonicalUnits), &
          rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, &
-        file=__FILE__)) &
-        return  ! bail out
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+         line=__LINE__, &
+         file=__FILE__)) &
+         return  ! bail out
+     endif
 
-    enddo
+     call flush(6)
+     call ESMF_LogWrite('Advertise: '//trim(field_defs(i)%stdname), ESMF_LOGMSG_INFO, rc=rc)
+     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+       line=__LINE__, &
+       file=__FILE__)) &
+       return  ! bail out
+    ! write(6,*) trim(field_defs(i)%stdname), trim(field_defs(i)%shortname) 
+     call NUOPC_Advertise(state, &
+       standardName=field_defs(i)%stdname, &
+       name=field_defs(i)%shortname, &
+       rc=rc)
+     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+       line=__LINE__, &
+       file=__FILE__)) &
+       return  ! bail out
 
-      end subroutine
+   enddo
 
-      subroutine HYCOM_FieldsSetup
-      character(len=*),parameter  :: subname='(hycom_cap:HYCOM_FieldsSetup)'
+   end subroutine HYCOM_AdvertiseFields
+
+   subroutine HYCOM_FieldsSetup
+   character(len=*),parameter  :: subname='(hycom_cap:HYCOM_FieldsSetup)'
 
 !--------- import fields to Sea Ice -------------
 ! tcraig, don't point directly into cice data YET (last field is optional in interface)
 ! instead, create space for the field when it's "realized".
-      call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_surface_temperature"         ,"k"  , "will provide")
-      call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_surface_salinity"            ,"1"   , "will provide")
-      call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_level"                       ,"m"  , "will provide")
-      call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_surface_slope_zonal"         ,"1"   , "will provide")
-      call fld_list_add(fldsFrOcn_num, fldsFrOcn, "sea_surface_slope_merid"         ,"1"   , "will provide")
-      call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_zonal"               ,"m/s", "will provide")
-      call fld_list_add(fldsFrOcn_num, fldsFrOcn, "ocn_current_merid"               ,"m/s", "will provide")
-      call fld_list_add(fldsFrOcn_num, fldsFrOcn, "freezing_melting_potential"      ,"1"   , "will provide")
-      call fld_list_add(fldsFrOcn_num, fldsFrOcn, "mixed_layer_depth"               ,"m"  , "will provide")
+   call fld_list_add(fldsFrOcn_num,fldsFrOcn,"sea_surface_temperature"       ,"k"  ,"will provide")
+   call fld_list_add(fldsFrOcn_num,fldsFrOcn,"sea_surface_salinity"          ,"1"  ,"will provide")
+   call fld_list_add(fldsFrOcn_num,fldsFrOcn,"sea_level"                     ,"m"  ,"will provide")
+   call fld_list_add(fldsFrOcn_num,fldsFrOcn,"sea_surface_slope_zonal"       ,"1"  ,"will provide")
+   call fld_list_add(fldsFrOcn_num,fldsFrOcn,"sea_surface_slope_merid"       ,"1"  ,"will provide")
+   call fld_list_add(fldsFrOcn_num,fldsFrOcn,"ocn_current_zonal"             ,"m/s","will provide")
+   call fld_list_add(fldsFrOcn_num,fldsFrOcn,"ocn_current_merid"             ,"m/s","will provide")
+   call fld_list_add(fldsFrOcn_num,fldsFrOcn,"freezing_melting_potential"    ,"1"  ,"will provide")
+   call fld_list_add(fldsFrOcn_num,fldsFrOcn,"mixed_layer_depth"             ,"m"  ,"will provide")
 ! fields for import
-      call fld_list_add(fldsToOcn_num, fldsToOcn, "sea_ice_fraction"                ,"1"   , "will provide") !
-      call fld_list_add(fldsToOcn_num, fldsToOcn, "stress_on_ocn_ice_zonal"         ,"1"   , "will provide") !
-      call fld_list_add(fldsToOcn_num, fldsToOCn, "stress_on_ocn_ice_merid"         ,"1"   , "will provide") !
-      call fld_list_add(fldsToOcn_num, fldsToOcn, "sea_ice_temperature"             ,"1"   , "will provide") !
-      call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_sw_pen_to_ocn"              ,"1"   , "will provide") !
-      call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_fresh_water_to_ocean_rate" ,"1"   , "will provide")!
-      call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_salt_rate"                  ,"1"   , "will provide") !
-      call fld_list_add(fldsToOcn_num, fldsToOcn, "net_heat_flx_to_ocn"             ,"1"   , "will provide") !
-      call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_ice_volume"                 ,"1"   , "will provide")
-      call fld_list_add(fldsToOcn_num, fldsToOcn, "mean_snow_volume"                ,"1"   , "will provide")
-
+   call fld_list_add(fldsToOcn_num,fldsToOcn,"sea_ice_fraction"              ,"1"  ,"will provide") !
+   call fld_list_add(fldsToOcn_num,fldsToOcn,"stress_on_ocn_ice_zonal"       ,"1"  ,"will provide") !
+   call fld_list_add(fldsToOcn_num,fldsToOCn,"stress_on_ocn_ice_merid"       ,"1"  ,"will provide") !
+   call fld_list_add(fldsToOcn_num,fldsToOcn,"sea_ice_temperature"           ,"1"  ,"will provide") !
+   call fld_list_add(fldsToOcn_num,fldsToOcn,"mean_sw_pen_to_ocn"            ,"1"  ,"will provide") !
+   call fld_list_add(fldsToOcn_num,fldsToOcn,"mean_fresh_water_to_ocean_rate","1"  ,"will provide")!
+   call fld_list_add(fldsToOcn_num,fldsToOcn,"mean_salt_rate"                ,"1"  ,"will provide") !
+   call fld_list_add(fldsToOcn_num,fldsToOcn,"net_heat_flx_to_ocn"           ,"1"  ,"will provide") !
+   call fld_list_add(fldsToOcn_num,fldsToOcn,"mean_ice_volume"               ,"1"  ,"will provide")
+   call fld_list_add(fldsToOcn_num,fldsToOcn,"mean_snow_volume"              ,"1"  ,"will provide")
 
   end subroutine HYCOM_FieldsSetup
 

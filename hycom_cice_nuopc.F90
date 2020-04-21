@@ -8,7 +8,8 @@
 ! Licensed under the University of Illinois-NCSA License.
 !==============================================================================
 ! esm app from https://www.earthsystemcog.org/projects/nuopc/proto_codes/ AtmOcnPetListProto
-!#define logerror
+#define logerr
+! can be logerr or logmulti. If none is chonsen lognone is chosen
 ! If turned on all log messages from ESMF will be log. Only used once
 program hycom_cice_nuopc
 
@@ -27,9 +28,12 @@ program hycom_cice_nuopc
 #ifdef logerror
    call ESMF_Initialize(logkindflag=ESMF_LOGKIND_MULTI_ON_ERROR, &
     defaultCalkind=ESMF_CALKIND_GREGORIAN, rc=rc)
-#else
+#elif defined logmulti
    call ESMF_Initialize(logkindflag=ESMF_LOGKIND_MULTI, &
     defaultCalkind=ESMF_CALKIND_GREGORIAN, rc=rc)
+#else
+    call ESMF_Initialize(logkindflag=ESMF_LOGKIND_NONE, &
+     defaultCalkind=ESMF_CALKIND_GREGORIAN, rc=rc)
 #endif
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
     line=__LINE__, &
@@ -41,7 +45,7 @@ program hycom_cice_nuopc
     file=__FILE__)) &
     call ESMF_Finalize(endflag=ESMF_END_ABORT)
 
-  call ESMF_LogWrite("HYCOM CICE coupled with NUOPC is  STARTING", ESMF_LOGMSG_INFO, rc=rc)
+  call ESMF_LogWrite("HYCOM CICE coupled with NUOPC is STARTING", ESMF_LOGMSG_INFO, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
     line=__LINE__, &
     file=__FILE__)) &

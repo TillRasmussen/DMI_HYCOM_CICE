@@ -24,19 +24,6 @@
         public scux     ! grid cell area at the p pts
         public scvy     ! grid cell area at the p pts
 
-        ! import from SEA-ICE
-        public cpl_sic,     sic_import    ! Sea Ice Concentration
-        public cpl_sitx,    sitx_import   ! Sea Ice X-Stress
-        public cpl_sity,    sity_import   ! Sea Ice Y-Stress
-        public cpl_siqs,    siqs_import   ! Solar Heat Flux thru Ice to Ocean
-        public cpl_sifh,    sifh_import   ! Ice Freezing/Melting Heat Flux
-        public cpl_sifs,    sifs_import   ! Ice Freezing/Melting Salt Flux
-        public cpl_sifw,    sifw_import   ! Ice Net Water Flux
-        public cpl_sit,     sit_import    ! Sea Ice Temperature
-        public cpl_sih,     sih_import    ! Sea Ice Thickness
-        public cpl_siu,     siu_import    ! Sea Ice X-Velocity
-        public cpl_siv,     siv_import    ! Sea Ice Y-Velocity
-
         ! native exports
         public temp           ! temp at the p pts
         public u, v           ! velocity components
@@ -71,7 +58,6 @@
         public si_ty          ! y-stress  under ice on p-grid from coupler
         
         ! ocn coupling frequency
-        public ocn_cpl_frq    ! in days
         public icefrq         ! in time step in HYCOM
         
         ! scalars and flags

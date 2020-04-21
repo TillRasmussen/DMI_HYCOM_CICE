@@ -124,7 +124,7 @@ module cice_cap
       file=__FILE__)) &
       return  ! bail out
 
-  end subroutine
+  end subroutine SetServices
 
   !-----------------------------------------------------------------------------
 
@@ -166,7 +166,7 @@ module cice_cap
     write(info,*) subname,' --- initialization phase 1 completed --- '
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
 
-  end subroutine
+  end subroutine InitializeAdvertise
   
   !-----------------------------------------------------------------------------
 
@@ -187,6 +187,7 @@ module cice_cap
     integer                                :: ilo,ihi,jlo,jhi
     integer                                :: ig,jg,cnt
     integer                                :: peID,locID
+    integer                                :: peIDCount
     integer, pointer                       :: indexList(:)
     integer, pointer                       :: deLabelList(:)
     integer, pointer                       :: deBlockList(:,:,:)
@@ -223,8 +224,9 @@ module cice_cap
     allocate(petMap(nblocks_tot))
     allocate(deLabelList(nblocks_tot))
 
-    write(tmpstr,'(a,1i8)') subname//' nblocks = ',nblocks_tot
+    write(tmpstr,'(a,2i8)') subname//' nblocks = ',nblocks_tot, nblocks
     call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+    peIDCount = 0
     do n = 1, nblocks_tot
        deLabelList(n) = n
        call get_block_parameter(n,ilo=ilo,ihi=ihi,jlo=jlo,jhi=jhi, &
@@ -242,6 +244,8 @@ module cice_cap
        write(tmpstr,'(a,3i8)') subname//' jglo = ',n,deBlockList(2,1,n),deBlockList(2,2,n)
        call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
     enddo
+    write(tmpstr,'(a,1i8)') subname//' npeID ',peIDCount
+    call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
 !!!TAR ADDED 141119
     delayout = ESMF_DELayoutCreate(petMap, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
@@ -446,7 +450,7 @@ module cice_cap
     write(info,*) subname,' --- initialization phase 2 completed --- '
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, line=__LINE__, file=__FILE__, rc=dbrc)
 
-  end subroutine
+  end subroutine InitializeRealize
   
   !-----------------------------------------------------------------------------
 
@@ -494,7 +498,7 @@ module cice_cap
       file=__FILE__)) &
       return  ! bail out
     
-  end subroutine
+  end subroutine SetClock
 
   !-----------------------------------------------------------------------------
 
@@ -519,14 +523,17 @@ module cice_cap
 !    real(ESMF_KIND_R8)                     :: sigma_r, sigma_l, sigma_c
     type(ESMF_StateItem_Flag)              :: itemType
     character(240)              :: msgString
+    type(ESMF_VM) :: vm
+    integer       :: me, npes
     character(len=*),parameter  :: subname='(cice_cap:ModelAdvance)'
+
     rc = ESMF_SUCCESS
     if(profile_memory) call ESMF_VMLogMemInfo("Entering CICE Model_ADVANCE: ")
     write(info,*) subname,' --- run phase 1 called --- '
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
     import_slice = import_slice + 1
     export_slice = export_slice + 1
-    
+
     ! query the Component for its clock, importState and exportState
     call NUOPC_ModelGet(gcomp, modelClock=clock, importState=importState, &
       exportState=exportState, rc=rc)
@@ -543,38 +550,34 @@ module cice_cap
     ! multiple calls to the ModelAdvance() routine. Every time the currTime
     ! will come in by one internal timeStep advanced. This goes until the
     ! stopTime of the internal Clock has been reached.
-    
-    call ESMF_ClockPrint(clock, options="currTime", &
-      preString="------>Advancing CICE from: ", rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    
+
+    call ESMF_VMGetGlobal(vm=vm, rc=rc)
+    call ESMF_VMGet (vm, localPet=me, petCount=npes)
+    if (me==0) call ESMF_ClockPrint(clock, options="currTime", &
+                     preString="DMI_CPL: -->Advancing CICE from: ", rc=rc)
+
     call ESMF_ClockGet(clock, currTime=currTime, timeStep=timeStep, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-    
-    call ESMF_TimePrint(currTime + timeStep, &
-      preString="--------------------------------> to: ", rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
+
+!MHRI    if (me==1) call ESMF_TimePrint(currTime + timeStep, &
+!MHRI                     preString="DMI_CPL: ------------------> to: ", rc=rc)
+
 !TODO ADD LOGFOUNDERROR
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-  call CICE_Import(importState,rc)
-  if (esmf_write_diagnostics >0) then
-     if (mod(import_slice,esmf_write_diagnostics)==0) then
-        call nuopc_write(state=importState,filenamePrefix='Import_CICE', &
-                       timeslice=import_slice/esmf_write_diagnostics,rc=rc)
-     endif
-  endif  ! write_diagnostics
+
+    call CICE_Import(importState,rc)
+    if (esmf_write_diagnostics >0) then
+       if (mod(import_slice,esmf_write_diagnostics)==0) then
+          call nuopc_write(state=importState,filenamePrefix='Import_CICE', &
+                         timeslice=import_slice/esmf_write_diagnostics,rc=rc)
+       endif
+    endif  ! write_diagnostics
     write(info,*) subname,' --- run phase 2 called --- '
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
     if(profile_memory) call ESMF_VMLogMemInfo("Before CICE_Run")
@@ -587,7 +590,7 @@ module cice_cap
     !---- local modifications to coupling fields -----
     call CICE_Export(exportState,rc=rc)
     if (esmf_write_diagnostics >0) then
-       if (mod(import_slice,esmf_write_diagnostics)==0) then
+       if (mod(export_slice,esmf_write_diagnostics)==0) then
            call nuopc_write(state=exportState,filenamePrefix='Export_CICE', &
                             timeslice=export_slice/esmf_write_diagnostics,rc=rc)
        endif
@@ -597,8 +600,10 @@ module cice_cap
     !call state_diagnose(exportState, 'cice_export', rc)
     write(info,*) subname,' --- run phase 4 called --- ',rc
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
-   if(profile_memory) call ESMF_VMLogMemInfo("Leaving CICE Model_ADVANCE: ")
-  end subroutine 
+    if(profile_memory) call ESMF_VMLogMemInfo("Leaving CICE Model_ADVANCE: ")
+
+    !call flush(6)
+  end subroutine ModelAdvance
 
   subroutine cice_model_finalize(gcomp, rc)
 
@@ -641,23 +646,26 @@ module cice_cap
     integer,intent(in)                          :: nfields
     type(fld_list_type), intent(inout)          :: field_defs(:)
     integer, intent(inout)                      :: rc
-
-    integer                                     :: i
+    type(ESMF_VM)                               :: vm
+    integer                                     :: i, me, npes
     character(len=*),parameter  :: subname='(cice_cap:CICE_AdvertiseFields)'
 
+    call ESMF_VMGetGlobal(vm=vm, rc=rc)
+    call ESMF_VMGet (vm, localPet=me, petCount=npes)
     rc = ESMF_SUCCESS
-    !write(6,*) nfields
+    if (me==0) write(6,*)'DMI_CPL: Number of CICE fields = ',nfields
     do i = 1, nfields
       if (.not. NUOPC_FieldDictionaryHasEntry(trim(field_defs(i)%stdname))) then
-         write(6,*) trim(field_defs(i)%stdname), trim(field_defs(i)%canonicalUnits)
-         call NUOPC_FieldDictionaryAddEntry( &
-              standardName=trim(field_defs(i)%stdname), &
-              canonicalUnits=trim(field_defs(i)%canonicalUnits), &
-              rc=rc)
-         if   (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-              line=__LINE__, &
-              file=__FILE__)) &
-              return  ! bail out
+        if (me==0) write(6,*) &
+          'DMI_CPL: ',trim(field_defs(i)%stdname),' : ',trim(field_defs(i)%canonicalUnits)
+        call NUOPC_FieldDictionaryAddEntry( &
+          standardName=trim(field_defs(i)%stdname), &
+          canonicalUnits=trim(field_defs(i)%canonicalUnits), &
+          rc=rc)
+        if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+          line=__LINE__, &
+          file=__FILE__)) &
+          return  ! bail out
       endif
 
       call ESMF_LogWrite('Advertise: '//trim(field_defs(i)%stdname), ESMF_LOGMSG_INFO, rc=rc)
@@ -927,7 +935,8 @@ module cice_cap
        call t2ugrid_vector(vocn)
     enddo
 
-  end subroutine
+  end subroutine CICE_Import
+
   subroutine CICE_Export(st,rc)
   type(ESMF_State)     :: st
   integer, intent(out) :: rc
@@ -974,22 +983,22 @@ module cice_cap
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
 
     write(info, *) subname//' ifrac size :', &
-      lbound(dataPtr_ifrac,1), ubound(dataPtr_ifrac,1), &
-      lbound(dataPtr_ifrac,2), ubound(dataPtr_ifrac,2), &
-      lbound(dataPtr_ifrac,3), ubound(dataPtr_ifrac,3)
+    lbound(dataPtr_ifrac,1), ubound(dataPtr_ifrac,1), &
+    lbound(dataPtr_ifrac,2), ubound(dataPtr_ifrac,2), &
+    lbound(dataPtr_ifrac,3), ubound(dataPtr_ifrac,3)
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
-   dataPtr_ifrac = 0._ESMF_KIND_R8
+    dataPtr_ifrac = 0._ESMF_KIND_R8
     dataPtr_itemp = 0._ESMF_KIND_R8
 !    dataPtr_mask = 0._ESMF_KIND_R8
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
-   do iblk = 1,nblocks
-       this_block = get_block(blocks_ice(iblk),iblk)
-       ilo = this_block%ilo
-       ihi = this_block%ihi
-       jlo = this_block%jlo
-       jhi = this_block%jhi
-       do j = jlo,jhi
-       do i = ilo,ihi
+    do iblk = 1,nblocks
+      this_block = get_block(blocks_ice(iblk),iblk)
+      ilo = this_block%ilo
+      ihi = this_block%ihi
+      jlo = this_block%jlo
+      jhi = this_block%jhi
+      do j = jlo,jhi
+        do i = ilo,ihi
           i1 = i - ilo + 1
           j1 = j - jlo + 1
 !          if (hm(i,j,iblk) > 0.5) dataPtr_mask(i1,j1,iblk) = 1._ESMF_KIND_R8
@@ -1005,14 +1014,12 @@ module cice_cap
           angT = ANGLET(i,j,iblk)
           dataPtr_strocnxT(i1,j1,iblk) =  ui*cos(-angT) + vj*sin(angT)  ! ice ocean stress
           dataPtr_strocnyT(i1,j1,iblk) = -ui*sin(angT)  + vj*cos(-angT)  ! ice ocean stress
-       enddo
-       enddo
+        enddo
+      enddo
     enddo
 !    write(tmpstr,*) subname//' mask = ',minval(dataPtr_mask),maxval(dataPtr_mask)
 !    call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
 
-
-   
-  end subroutine
+  end subroutine CICE_Export
 
 end module cice_cap
