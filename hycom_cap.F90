@@ -53,6 +53,7 @@ module hycom_cap
   type (fld_list_type) :: fldsFrOcn(fldsMax)
   character(len=2048):: info
   logical :: profile_memory = .true.
+  real(ESMF_KIND_R8)          :: ocn_cpl_frq
 
   !-----------------------------------------------------------------------------
   contains
@@ -640,22 +641,16 @@ module hycom_cap
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
     call state_getFldPtr(st, "sea_ice_temperature",dataPtr_sit,rc=rc)  
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    cpl_sit=.true.
     call state_getFldPtr(st, "mean_ice_volume",dataPtr_sih,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    cpl_sih = .true.
     call state_getFldPtr(st, "stress_on_ocn_ice_zonal",dataPtr_sitx,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    cpl_sitx = .true.
     call state_getFldPtr(st, "stress_on_ocn_ice_merid",dataPtr_sity,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    cpl_sity = .true.
     call state_getFldPtr(st, "mean_sw_pen_to_ocn",dataPtr_siqs,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    cpl_siqs = .true.
     call state_getFldPtr(st, "mean_salt_rate",dataPtr_sifs,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    cpl_sifs = .true.
     call state_getFldPtr(st,"mean_fresh_water_to_ocean_rate",dataPtr_sifw,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
 
@@ -669,10 +664,11 @@ module hycom_cap
           covice(i,j) = dataPtr_sic(i,j) !Sea Ice Concentration
           si_c  (i,j) = dataPtr_sic(i,j) !Sea Ice Concentration
           if (covice(i,j).gt.0.0) then
+! THIS MOST LIKELY NEEDS SOMETHING
             !if (frzh(i,j).gt.0.0) then
             !flxice(i,j) = frzh(i,j)         !Sea Ice Heat Flux Freezing potential
             !else
-            flxice(i,j) =  sifh_import(i,j) !Sea Ice Heat Flux Melting potential
+            flxice(i,j) =  0.d0 !sifh_import(i,j) !Sea Ice Heat Flux Melting potential
             !endif
 !            flxice(i,j) = 0.0
             xstress     = -dataPtr_sitx(i,j) ! opposite of what ice sees
@@ -888,7 +884,7 @@ module hycom_cap
 
    enddo
 
-   end subroutine
+   end subroutine HYCOM_AdvertiseFields
 
    subroutine HYCOM_FieldsSetup
    character(len=*),parameter  :: subname='(hycom_cap:HYCOM_FieldsSetup)'

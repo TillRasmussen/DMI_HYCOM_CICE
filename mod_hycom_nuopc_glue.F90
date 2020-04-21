@@ -31,7 +31,7 @@ module mod_hycom_nuopc_glue
   public hycom_nuopc_glue_type
   public HYCOM_TileInfo, HYCOM_GridInit !HYCOM_GlueInitialize
 !  public HYCOM_GlueFieldRealize, HYCOM_GlueFieldsRealize
-  public HYCOM_GlueFieldsDataImport, HYCOM_GlueFieldsDataExport
+!tarnotneeded  public HYCOM_GlueFieldsDataImport, HYCOM_GlueFieldsDataExport
   public jja  
   !-----------------------------------------------------------------------------
   contains
@@ -286,71 +286,9 @@ module mod_hycom_nuopc_glue
 
   !-----------------------------------------------------------------------------
 
-
-  subroutine HYCOM_GlueFieldsDataImport(glue, rc)
-    type(hycom_nuopc_glue_type), intent(inout)  :: glue
-    integer, intent(out), optional              :: rc
-    
-    integer                           :: fieldCount, iField, stat
-    type(ESMF_Field), allocatable     :: fieldList(:)
-    character(len=80), allocatable    :: fieldNameList(:)
-    character(len=80)                 :: fieldName, fieldStdName
-    type(ESMF_Field)                  :: field, shadow
-    type(ESMF_StateIntent_Flag)       :: stateIntent
-    real(kind=ESMF_KIND_R8), pointer  :: farrayPtr(:,:)
-    real(kind=ESMF_KIND_R8), pointer  :: impPtr(:,:), impPtr2(:,:,:)
-    integer                           :: i,j
-    logical                           :: twoLevel
-    real, parameter                   :: sstmin = -1.8 ! Celsius
-    real, parameter                   :: sstmax = 35.0 ! Celsius
-    logical                           :: isConnected
-    
-    if (present(rc)) rc = ESMF_SUCCESS
-    ! access the members inside of the importFields FieldBundle
-    call ESMF_FieldBundleGet(glue%importFields, fieldCount=fieldCount, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    allocate(fieldList(fieldCount), fieldNameList(fieldCount), stat=stat)
-    if (ESMF_LogFoundAllocError(statusToCheck=stat, &
-      msg="Allocations failed.", &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    call ESMF_FieldBundleGet(glue%importFields, fieldList=fieldList, &
-      fieldNameList=fieldNameList, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    ! loop over all of the import Fields and pull the data in
-    do iField=1, fieldCount
-   
-      field = fieldList(iField)
-      fieldName = fieldNameList(iField)
-    
-      call ESMF_AttributeGet(field, name="StandardName", value=fieldStdName, rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, &
-        file=__FILE__)) &
-      return ! bail out
-      isConnected = .false.
-      call ESMF_AttributeGet(field, name="HYCOM_IN_CESM_Connected", value=isConnected, defaultValue=.false., rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, &
-        file=__FILE__)) &
-      return ! bail out
-      if(.not. isConnected) cycle
-      !call ESMF_LogWrite("HYCOM_GlueFieldsDataImport(): "// &
-      !  trim(fieldStdName)//" - "//trim(fieldName), ESMF_LOGMSG_INFO)
-        
-      ! Access the HYCOM distributed field.
-      call ESMF_FieldGet(field, farrayPtr=farrayPtr, rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, &
-        file=__FILE__)) &
-        return  ! bail out
+#ifdef tarnotneeded
+!IMPORT
+ ! coupled fields from CESM SAVED TO REMEMBER  
       ! identify the exact import field by standard name and copy the data
       twoLevel = .false. ! reset
       if (fieldStdName == "sea_ice_area_fraction") then
@@ -456,95 +394,9 @@ module mod_hycom_nuopc_glue
       endif !iceflg>=2 (icmflg)
     enddo
     enddo
-
-    ! clean-up
-    deallocate(fieldList, fieldNameList, stat=stat)
-    if (ESMF_LogFoundDeallocError(statusToCheck=stat, &
-      msg="Deallocations failed.", &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-
-  end subroutine
-
+!END IMPORT
+!START EXPORT
   !-----------------------------------------------------------------------------
-  subroutine HYCOM_GlueFieldsDataExport(glue, initFlag, rc)
-    type(hycom_nuopc_glue_type), intent(inout)  :: glue
-    logical                                     :: initFlag
-    integer, intent(out), optional              :: rc
-    
-    integer                           :: fieldCount, iField, stat
-    type(ESMF_Field), allocatable     :: fieldList(:)
-    character(len=80), allocatable    :: fieldNameList(:)
-    character(len=80)                 :: fieldName, fieldStdName, msg
-    type(ESMF_Field)                  :: field, shadow
-    type(ESMF_StateIntent_Flag)       :: stateIntent
-    real(kind=ESMF_KIND_R8), pointer  :: farrayPtr(:,:)
-    integer                           :: i,j
-    logical                           :: isConnected
-    
-    real(kind=ESMF_KIND_R8) :: hfrz, t2f, tfrz, smxl, tmxl, ssfi
-    real(kind=ESMF_KIND_R8) :: usur1, usur2, vsur1, vsur2, utot, vtot
-    real(kind=ESMF_KIND_R8) :: ssh_n,ssh_s,ssh_e,ssh_w,dhdx,dhdy
-    integer                 :: cplfrq
-    
-    if (present(rc)) rc = ESMF_SUCCESS
-
-    ! access the members inside of the exportFields FieldBundle
-    call ESMF_FieldBundleGet(glue%exportFields, fieldCount=fieldCount, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    allocate(fieldList(fieldCount), fieldNameList(fieldCount), stat=stat)
-    if (ESMF_LogFoundAllocError(statusToCheck=stat, &
-      msg="Allocations failed.", &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    call ESMF_FieldBundleGet(glue%exportFields, fieldList=fieldList, &
-      fieldNameList=fieldNameList, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-
-    !write(msg, *) 'Number of fields in export Fields', fieldCount
-    !call ESMF_LogWrite("HYCOM_GlueFieldsDataExport(): "// &
-    !  trim(msg), ESMF_LOGMSG_INFO)
-    
-    ! loop over all of the export Fields and fill in the data
-    do iField=1, fieldCount
-    
-      field = fieldList(iField)
-      fieldName = fieldNameList(iField)
-    
-      call ESMF_AttributeGet(field, name="StandardName", value=fieldStdName, rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, &
-        file=__FILE__)) &
-      return ! bail out
-      isConnected = .false.
-      call ESMF_AttributeGet(field, name="HYCOM_IN_CESM_Connected", value=isConnected, defaultValue=.false., rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, &
-        file=__FILE__)) &
-      return ! bail out
-      !write(msg, *) trim(fieldStdName), ' connected: ', isConnected
-      !call ESMF_LogWrite("HYCOM_GlueFieldsDataExport(): "// &
-      !  trim(msg), ESMF_LOGMSG_INFO)
-      if(.not. isConnected) cycle
-      
-      !call ESMF_LogWrite("HYCOM_GlueFieldsDataExport(): "// &
-      !  trim(fieldStdName)//" - "//trim(fieldName), ESMF_LOGMSG_INFO)
-        
-      ! pointer to the export field data
-      call ESMF_FieldGet(field, farrayPtr=farrayPtr, rc=rc)
-      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-        line=__LINE__, &
-        file=__FILE__)) &
-        return  ! bail out
-
       ! identify the exact export field by standard name and copy the data
       if (fieldStdName == "sea_surface_temperature") then
         do j=1,jja
@@ -661,16 +513,6 @@ module mod_hycom_nuopc_glue
       endif
       
     enddo
-    
-    ! clean-up
-    deallocate(fieldList, fieldNameList, stat=stat)
-    if (ESMF_LogFoundDeallocError(statusToCheck=stat, &
-      msg="Deallocations failed.", &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    
-  end subroutine
-
+#endif
 
 end module

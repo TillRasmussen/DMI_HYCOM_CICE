@@ -187,6 +187,7 @@ module cice_cap
     integer                                :: ilo,ihi,jlo,jhi
     integer                                :: ig,jg,cnt
     integer                                :: peID,locID
+    integer                                :: peIDCount
     integer, pointer                       :: indexList(:)
     integer, pointer                       :: deLabelList(:)
     integer, pointer                       :: deBlockList(:,:,:)
@@ -223,8 +224,9 @@ module cice_cap
     allocate(petMap(nblocks_tot))
     allocate(deLabelList(nblocks_tot))
 
-    write(tmpstr,'(a,1i8)') subname//' nblocks = ',nblocks_tot
+    write(tmpstr,'(a,2i8)') subname//' nblocks = ',nblocks_tot, nblocks
     call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+    peIDCount = 0
     do n = 1, nblocks_tot
        deLabelList(n) = n
        call get_block_parameter(n,ilo=ilo,ihi=ihi,jlo=jlo,jhi=jhi, &
@@ -242,6 +244,8 @@ module cice_cap
        write(tmpstr,'(a,3i8)') subname//' jglo = ',n,deBlockList(2,1,n),deBlockList(2,2,n)
        call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
     enddo
+    write(tmpstr,'(a,1i8)') subname//' npeID ',peIDCount
+    call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
 !!!TAR ADDED 141119
     delayout = ESMF_DELayoutCreate(petMap, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
@@ -586,7 +590,7 @@ module cice_cap
     !---- local modifications to coupling fields -----
     call CICE_Export(exportState,rc=rc)
     if (esmf_write_diagnostics >0) then
-       if (mod(import_slice,esmf_write_diagnostics)==0) then
+       if (mod(export_slice,esmf_write_diagnostics)==0) then
            call nuopc_write(state=exportState,filenamePrefix='Export_CICE', &
                             timeslice=export_slice/esmf_write_diagnostics,rc=rc)
        endif
@@ -598,7 +602,7 @@ module cice_cap
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
     if(profile_memory) call ESMF_VMLogMemInfo("Leaving CICE Model_ADVANCE: ")
 
-    call flush(6)
+    !call flush(6)
   end subroutine ModelAdvance
 
   subroutine cice_model_finalize(gcomp, rc)
@@ -933,7 +937,6 @@ module cice_cap
 
   end subroutine CICE_Import
 
-  !-----------------------------------------------------------------------------
   subroutine CICE_Export(st,rc)
   type(ESMF_State)     :: st
   integer, intent(out) :: rc
