@@ -228,26 +228,36 @@ module cice_cap
     call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
     peIDCount = 0
     do n = 1, nblocks_tot
-       deLabelList(n) = n
+       deLabelList(n) = n-1
        call get_block_parameter(n,ilo=ilo,ihi=ihi,jlo=jlo,jhi=jhi, &
           i_glob=i_glob,j_glob=j_glob)
-       deBlockList(1,1,n) = i_glob(ilo)
-       deBlockList(1,2,n) = i_glob(ihi)
-       deBlockList(2,1,n) = j_glob(jlo)
-       deBlockList(2,2,n) = j_glob(jhi)
+!       deBlockList(1,1,n) = i_glob(ilo)
+!       deBlockList(1,2,n) = i_glob(ihi)
+!       deBlockList(2,1,n) = j_glob(jlo)
+!       deBlockList(2,2,n) = j_glob(jhi)
        call ice_distributionGetBlockLoc(distrb_info,n,peID,locID)
-       petMap(n) = max(0,peID - 1)
-       write(tmpstr,'(a,3i8)') subname//' IDs  = ',n,peID, locID
+       if (peID > 0) then
+          peIDCount = peIDCount+1
+          petMap(peIDCount) = peID-1
+          deBlockList(1,1,peIDCount) = i_glob(ilo)
+          deBlockList(1,2,peIDCount) = i_glob(ihi)
+          deBlockList(2,1,peIDCount) = j_glob(jlo)
+          deBlockList(2,2,PeIDCount) = j_glob(jhi)
+          write(tmpstr,'(a,4i8)') subname//' ID2s  = ',n,peID, locID, nblocks
+          call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+       !reducepetmappetMap(n) = max(0,peID - 1)
+       write(tmpstr,'(a,4i8)') subname//' IDs  = ',n,peID, locID, nblocks
        call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-       write(tmpstr,'(a,3i8)') subname//' iglo = ',n,deBlockList(1,1,n),deBlockList(1,2,n)
+       write(tmpstr,'(a,3i8)') subname//' iglo = ',n,deBlockList(1,1,peIDCount),deBlockList(1,2,peIDCount)
        call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
-       write(tmpstr,'(a,3i8)') subname//' jglo = ',n,deBlockList(2,1,n),deBlockList(2,2,n)
+       write(tmpstr,'(a,3i8)') subname//' jglo = ',n,deBlockList(2,1,peIDCount),deBlockList(2,2,peIDCount)
        call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
+       endif
     enddo
     write(tmpstr,'(a,1i8)') subname//' npeID ',peIDCount
     call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
 !!!TAR ADDED 141119
-    delayout = ESMF_DELayoutCreate(petMap, rc=rc)
+    delayout = ESMF_DELayoutCreate(petMap(1:peIDCount), rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
 
 !tarnotglobal    allocate(connectionList(2))
@@ -269,9 +279,9 @@ module cice_cap
 
     distgrid = ESMF_DistGridCreate(minIndex=(/1,1/), maxIndex=(/nx_global,ny_global/), &
 !        indexflag = ESMF_INDEX_DELOCAL, &
-        deBlockList=deBlockList, &
+        deBlockList=deBlockList(:,:,1:peIDCount), &
 !        deLabelList=deLabelList, &
-!         delayout=delayout, &
+         delayout=delayout, &
 !tarnotglobal        connectionList=connectionList, &
         rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
