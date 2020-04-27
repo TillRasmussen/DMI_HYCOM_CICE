@@ -9,7 +9,7 @@ module hycom_cap
 
   use mod_hycom_nuopc_glue
   use mod_cb_arrays_nuopc_glue
-  use mod_nuopc_options, only: esmf_write_diagnostics
+  use mod_nuopc_options, only: esmf_write_diagnostics, nuopc_restart, ocn_petCount
 
   use ESMF
   use NUOPC
@@ -185,23 +185,31 @@ module hycom_cap
       line=__LINE__, &
       file=__FILE__)) &
     return  ! bail out
-! This used to be parameters from CESM module seq_infodata_mod
-    starttype="continue"
-    if (     trim(starttype) == trim("startup")) then
-       l_startTime_r8=-startTime_r8
-       restFlag = .false.
-    else if (trim(starttype) == trim("continue")) then
-       l_startTime_r8=startTime_r8
-       restFlag = .true.
-    else if (trim(starttype) == trim("branch")) then
-       l_startTime_r8=startTime_r8
-       restFlag = .true.
+
+    ! HYCOM restart or coldstart
+    if (nuopc_restart) then
+      l_startTime_r8=startTime_r8   ! Restart
     else
-       call ESMF_LogWrite('hycom_nuopc ERROR: unknown starttype',  &
-          ESMF_LOGMSG_ERROR, rc=rc)
-       rc = ESMF_RC_OBJ_BAD
-       return
-    end if
+      l_startTime_r8=-startTime_r8  ! Coldstart
+    endif
+
+! This used to be parameters from CESM module seq_infodata_mod
+!    starttype="continue"
+!    if (     trim(starttype) == trim("startup")) then
+!       l_startTime_r8=-startTime_r8
+!       restFlag = .false.
+!    else if (trim(starttype) == trim("continue")) then
+!       l_startTime_r8=startTime_r8
+!       restFlag = .true.
+!    else if (trim(starttype) == trim("branch")) then
+!       l_startTime_r8=startTime_r8
+!       restFlag = .true.
+!    else
+!       call ESMF_LogWrite('hycom_nuopc ERROR: unknown starttype',  &
+!          ESMF_LOGMSG_ERROR, rc=rc)
+!       rc = ESMF_RC_OBJ_BAD
+!       return
+!    end if
 
     ! Get the pointer restart name !!Alex
       !restart_write = .true. TAR NEEDED for averaged output.
