@@ -296,11 +296,11 @@ module hycom_cap
       return  ! bail out
 
     ! Import data to HYCOM native structures through glue fields.
-   call HYCOM_Import(importState,.true.,rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
+!   call HYCOM_Import(importState,.true.,rc)
+!    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+!      line=__LINE__, &
+!      file=__FILE__)) &
+!      return  ! bail out
     ! Export HYCOM native structures to data through glue fields.
     CALL HYCOM_export(exportState, .false., rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &

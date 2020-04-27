@@ -445,11 +445,11 @@ module cice_cap
       file=__FILE__)) &
       return  ! bail out
     ! Import data to CICE native structures through glue fields.
-   call CICE_Import(importState,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
+!   call CICE_Import(importState,rc=rc)
+!    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+!      line=__LINE__, &
+!      file=__FILE__)) &
+!      return  ! bail out
     ! Export CICE native structures to data through glue fields.
     CALL CICE_export(exportState, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -926,7 +926,7 @@ module cice_cap
           j1 = j - jlo + 1
           sss    (i,j,iblk) = dataPtr_sss    (i1,j1,iblk)  ! sea surface salinity (maybe for mushy layer)
           sst    (i,j,iblk) = dataPtr_sst    (i1,j1,iblk) - Tffresh  ! sea surface temp (may not be needed?)
-          
+
           frzmlt (i,j,iblk) = dataPtr_fmpot  (i1,j1,iblk)
           ue = dataPtr_ocncz  (i1,j1,iblk)
           vn = dataPtr_ocncm  (i1,j1,iblk)

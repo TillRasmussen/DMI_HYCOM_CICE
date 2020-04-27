@@ -8,7 +8,7 @@
 ! Licensed under the University of Illinois-NCSA License.
 !==============================================================================
 ! esm app from https://www.earthsystemcog.org/projects/nuopc/proto_codes/ AtmOcnPetListProto
-#define logerr
+!#define logmulti
 ! can be logerr or logmulti. If none is chonsen lognone is chosen
 ! If turned on all log messages from ESMF will be log. Only used once
 program hycom_cice_nuopc
