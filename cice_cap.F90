@@ -26,7 +26,7 @@ module cice_cap
 !end cice specific
   use ESMF
   use NUOPC
-  use mod_nuopc_options, only: esmf_write_diagnostics
+  use mod_nuopc_options, only: esmf_write_diagnostics, ice_petCount
   use NUOPC_Model, &
     model_routine_SS      => SetServices, &
     model_label_SetClock  => label_SetClock, &
@@ -182,7 +182,7 @@ module cice_cap
     type(ESMF_Grid)                        :: gridOut
     type(ESMF_DistGrid)                    :: distgrid
     type(ESMF_DistGridConnection), allocatable :: connectionList(:)
-    integer                                :: npet
+    integer                                :: npet,me
     integer                                :: i,j,iblk, n, i1,j1, DE
     integer                                :: ilo,ihi,jlo,jhi
     integer                                :: ig,jg,cnt
@@ -209,6 +209,21 @@ module cice_cap
 
     ! We can check if npet is 4 or some other value to make sure
     ! CICE is configured to run on the correct number of processors.
+
+    ! Check if requested PES is equal to CICE required
+    call ESMF_VMGetGlobal(vm=vm, rc=rc)
+    call ESMF_VMGet (vm, localPet=me, petCount=npet)
+    if (me==0) then
+      write(6,*)'DMI_CPL: Required CICE pes: nblocks_tot:', nblocks_tot
+    endif
+    call flush(6)
+    if (nblocks_tot /= ice_petCount) then
+      if (me==0) write(6,*) &
+                  'DMI_CPL: ERROR: Required CICE pes not equal to requested ice_petCount:', &
+                   nblocks_tot, ice_petCount
+      call flush(6)
+      call exit(9)  ! bail out
+    endif
 
     ! create a Grid object for Fields
     ! we are going to create a single tile displaced pole grid from a gridspec
@@ -574,12 +589,6 @@ module cice_cap
 
 !MHRI    if (me==1) call ESMF_TimePrint(currTime + timeStep, &
 !MHRI                     preString="DMI_CPL: ------------------> to: ", rc=rc)
-
-!TODO ADD LOGFOUNDERROR
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
 
     call CICE_Import(importState,rc)
     if (esmf_write_diagnostics >0) then
