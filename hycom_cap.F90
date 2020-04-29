@@ -216,7 +216,7 @@ module hycom_cap
 
     call ESMF_LOGWRITE("BEFORE HYCOM_INIT", ESMF_LOGMSG_INFO, rc=rc)
     ! -->> call into HYCOM <<--
-    call HYCOM_Init(mpi_Comm, & 
+    call HYCOM_Init(mpi_comm, & 
        hycom_start_dtg=l_startTime_r8, hycom_end_dtg=stopTime_r8)
 !tar        restart_write=restart_write)
 
@@ -262,7 +262,6 @@ module hycom_cap
     type(ESMF_Grid)             :: gridIn
     type(ESMF_Grid)             :: gridOut
     type(ESMF_array)            :: array
-    integer                     :: mpiComm
 !    TYPE(ESMF_Time)             :: startTime, stopTime, hycomRefTime, currTime
 !    TYPE(ESMF_TimeInterval)     :: interval,timeStep
 !    real(ESMF_KIND_R8)          :: startTime_r8, stopTime_r8, l_startTime_r8
