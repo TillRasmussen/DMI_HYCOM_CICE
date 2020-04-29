@@ -44,7 +44,6 @@ else
         setenv ESMFMKFILE /home/${user}/esmf/ESMF/esmf_${v_esmf}/lib/libO/Unicos.${esmf_compiler}.64.mpi.default/esmf.mk
         setenv CICE_LIB /data/${user}/git_cice/build_cice_dmi/${compiler}_dmi/compile/
         setenv HYCOM_LIB /data/${user}/git_hycom/build_hycom_dmi/DMI_${compiler}_coupled/
-        setenv CPPFLAGS -Dlogmulti
 endif
 setenv HC_FILE hycom_${compiler}
 setenv CICE_FILE cice_${compiler}
