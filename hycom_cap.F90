@@ -10,7 +10,6 @@ module hycom_cap
   use mod_hycom_nuopc_glue
   use mod_cb_arrays_nuopc_glue
   use mod_nuopc_options, only: esmf_write_diagnostics, nuopc_restart, profile_memory
-
   use ESMF
   use NUOPC
   use NUOPC_Model, &
@@ -192,8 +191,6 @@ module hycom_cap
       l_startTime_r8=-startTime_r8  ! Coldstart
     endif
 
-! This used to be parameters from CESM module seq_infodata_mod
-
     ! Get the pointer restart name !!Alex
       !restart_write = .true. TAR NEEDED for averaged output.
 
@@ -245,7 +242,6 @@ module hycom_cap
     type(ESMF_Grid)             :: gridIn
     type(ESMF_Grid)             :: gridOut
     type(ESMF_array)            :: array
-    integer                     :: mpiComm
 !    TYPE(ESMF_Time)             :: startTime, stopTime, hycomRefTime, currTime
 !    TYPE(ESMF_TimeInterval)     :: interval,timeStep
 !    real(ESMF_KIND_R8)          :: startTime_r8, stopTime_r8, l_startTime_r8
