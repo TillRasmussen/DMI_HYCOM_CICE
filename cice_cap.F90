@@ -26,7 +26,7 @@ module cice_cap
 !end cice specific
   use ESMF
   use NUOPC
-  use mod_nuopc_options, only: esmf_write_diagnostics
+  use mod_nuopc_options, only: esmf_write_diagnostics, ice_petCount, profile_memory
   use NUOPC_Model, &
     model_routine_SS      => SetServices, &
     model_label_SetClock  => label_SetClock, &
@@ -69,8 +69,6 @@ module cice_cap
   character(len=2048):: info
   logical :: isPresent
   integer :: dbrc     ! temporary debug rc value
-
-  logical :: profile_memory = .true.
 
   contains
   !-----------------------------------------------------------------------------
@@ -182,7 +180,7 @@ module cice_cap
     type(ESMF_Grid)                        :: gridOut
     type(ESMF_DistGrid)                    :: distgrid
     type(ESMF_DistGridConnection), allocatable :: connectionList(:)
-    integer                                :: npet
+    integer                                :: npet,me
     integer                                :: i,j,iblk, n, i1,j1, DE
     integer                                :: ilo,ihi,jlo,jhi
     integer                                :: ig,jg,cnt
@@ -209,6 +207,21 @@ module cice_cap
 
     ! We can check if npet is 4 or some other value to make sure
     ! CICE is configured to run on the correct number of processors.
+
+    ! Check if requested PES is equal to CICE required
+    call ESMF_VMGetGlobal(vm=vm, rc=rc)
+    call ESMF_VMGet (vm, localPet=me, petCount=npet)
+    if (me==0) then
+      write(6,*)'DMI_CPL: Required CICE pes: nblocks_tot:', nblocks_tot
+    endif
+    call flush(6)
+    if (nblocks_tot /= ice_petCount) then
+      if (me==0) write(6,*) &
+                  'DMI_CPL: ERROR: Required CICE pes not equal to requested ice_petCount:', &
+                   nblocks_tot, ice_petCount
+      call flush(6)
+      call exit(9)  ! bail out
+    endif
 
     ! create a Grid object for Fields
     ! we are going to create a single tile displaced pole grid from a gridspec
@@ -575,12 +588,6 @@ module cice_cap
 !MHRI    if (me==1) call ESMF_TimePrint(currTime + timeStep, &
 !MHRI                     preString="DMI_CPL: ------------------> to: ", rc=rc)
 
-!TODO ADD LOGFOUNDERROR
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-
     call CICE_Import(importState,rc)
     if (esmf_write_diagnostics >0) then
        if (mod(import_slice,esmf_write_diagnostics)==0) then
@@ -811,7 +818,6 @@ module cice_cap
 ! WILL PROVIDE means that field has its own grid. Can be changed to accept grid from outside
     call fld_list_add(fldsToIce_num, fldsToIce, "sea_surface_temperature"         ,"K"   , "will provide")
     call fld_list_add(fldsToIce_num, fldsToIce, "sea_surface_salinity"            ,"1"   , "will provide")
-    call fld_list_add(fldsToIce_num, fldsToIce, "sea_level"                       ,"m"   , "will provide")
     call fld_list_add(fldsToIce_num, fldsToIce, "sea_surface_slope_zonal"         ,"1"   , "will provide")
     call fld_list_add(fldsToIce_num, fldsToIce, "sea_surface_slope_merid"         ,"1"   , "will provide")
     call fld_list_add(fldsToIce_num, fldsToIce, "ocn_current_zonal"               ,"m/s" , "will provide")
@@ -883,7 +889,6 @@ module cice_cap
     integer, intent(out) :: rc
     real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sst(:,:,:)
     real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sss(:,:,:)
-    real(kind=ESMF_KIND_R8), pointer  :: dataPtr_ssh(:,:,:)
     real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sssz(:,:,:)
     real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sssm(:,:,:)
     real(kind=ESMF_KIND_R8), pointer  :: dataPtr_ocncz(:,:,:)
@@ -899,8 +904,6 @@ module cice_cap
     call State_getFldPtr(st,'sea_surface_temperature',dataPtr_sst,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
     call State_getFldPtr(st,'sea_surface_salinity',dataPtr_sss,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call State_getFldPtr(st,'sea_level',dataPtr_ssh,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
     call State_getFldPtr(st,'sea_surface_slope_zonal',dataPtr_sssz,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
@@ -969,8 +972,6 @@ module cice_cap
     type(block)                            :: this_block
     character(len=*),parameter  :: subname='(cice_cap:CICE_Export)'
 !TODO clean up fields
-!    call State_getFldPtr(st,'ice_mask',dataPtr_mask,rc=rc)
-!    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
     call State_getFldPtr(st,'sea_ice_fraction',dataPtr_ifrac,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
     call State_getFldPtr(st,'sea_ice_temperature',dataPtr_itemp,rc=rc)
@@ -999,7 +1000,6 @@ module cice_cap
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
     dataPtr_ifrac = 0._ESMF_KIND_R8
     dataPtr_itemp = 0._ESMF_KIND_R8
-!    dataPtr_mask = 0._ESMF_KIND_R8
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
     do iblk = 1,nblocks
       this_block = get_block(blocks_ice(iblk),iblk)
@@ -1011,7 +1011,6 @@ module cice_cap
         do i = ilo,ihi
           i1 = i - ilo + 1
           j1 = j - jlo + 1
-!          if (hm(i,j,iblk) > 0.5) dataPtr_mask(i1,j1,iblk) = 1._ESMF_KIND_R8
           dataPtr_ifrac   (i1,j1,iblk) = aice(i,j,iblk)   ! ice fraction (0-1)
           dataPtr_fhocn    (i1,j1,iblk) = fhocn(i,j,iblk)   ! heat exchange with ocean
           dataPtr_fresh    (i1,j1,iblk) = fresh(i,j,iblk)   ! fresh water to ocean
@@ -1027,8 +1026,6 @@ module cice_cap
         enddo
       enddo
     enddo
-!    write(tmpstr,*) subname//' mask = ',minval(dataPtr_mask),maxval(dataPtr_mask)
-!    call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
 
   end subroutine CICE_Export
 

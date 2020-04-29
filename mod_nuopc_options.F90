@@ -1,6 +1,6 @@
 module mod_nuopc_options
   implicit none
-  logical,save,public        :: nuopc_restart        ! If true model will restart from 
+  logical,save,public        :: nuopc_restart, profile_memory  ! If true model will restart from 
   
   integer(4), save, public   :: nuopc_tinterval       ! coupling interval 
   integer(4), dimension(4), save, public :: tstart, tend !year, month, day and hour
@@ -23,7 +23,7 @@ module mod_nuopc_options
     
     namelist /nuopc_nml/ nuopc_tstart, nuopc_tend,nuopc_tinterval, &
                          nuopc_restart, esmf_write_diagnostics,    &
-                         ocn_petCount, ice_petCount
+                         ocn_petCount, ice_petCount, profile_memory
     !default values
     !  in operational runs at time=0 where the model has to be restarted
     nuopc_tstart          = '2017031500' ! start time string
@@ -34,6 +34,7 @@ module mod_nuopc_options
     ice_petCount          = 6
     esmf_write_diagnostics = 0  !number of time steps between netcdf dump. 0 No dump.
                                 ! *NB*: Set to zero if more than one node (crash).
+    profile_memory       = .false.
     ! read namelist
     open (funi, file='nuopc_opt', status='old',iostat=nml_err)
     if (nml_err < 0) then
@@ -57,6 +58,7 @@ module mod_nuopc_options
       write(6,*)'DMI_CPL: ocn_petCount:   ',ocn_petCount
       write(6,*)'DMI_CPL: ice_petCount:   ',ice_petCount
       write(6,*)'DMI_CPL: esmf_write_diagnostics:',esmf_write_diagnostics
+      write(6,*)'DMI_CPL: profile_memory: ',profile_memory
     endif
     !-- Adjust start/end times
     read (nuopc_tstart(1:4),*) tstart(1)

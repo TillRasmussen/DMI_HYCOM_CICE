@@ -9,7 +9,7 @@ module hycom_cap
 
   use mod_hycom_nuopc_glue
   use mod_cb_arrays_nuopc_glue
-  use mod_nuopc_options, only: esmf_write_diagnostics
+  use mod_nuopc_options, only: esmf_write_diagnostics, nuopc_restart, profile_memory
 
   use ESMF
   use NUOPC
@@ -52,7 +52,6 @@ module hycom_cap
   integer :: fldsFrOcn_num = 0
   type (fld_list_type) :: fldsFrOcn(fldsMax)
   character(len=2048):: info
-  logical :: profile_memory = .true.
   real(ESMF_KIND_R8)          :: ocn_cpl_frq
 
   !-----------------------------------------------------------------------------
@@ -185,30 +184,22 @@ module hycom_cap
       line=__LINE__, &
       file=__FILE__)) &
     return  ! bail out
-! This used to be parameters from CESM module seq_infodata_mod
-    starttype="continue"
-    if (     trim(starttype) == trim("startup")) then
-       l_startTime_r8=-startTime_r8
-       restFlag = .false.
-    else if (trim(starttype) == trim("continue")) then
-       l_startTime_r8=startTime_r8
-       restFlag = .true.
-    else if (trim(starttype) == trim("branch")) then
-       l_startTime_r8=startTime_r8
-       restFlag = .true.
+
+    ! HYCOM restart or coldstart
+    if (nuopc_restart) then
+      l_startTime_r8=startTime_r8   ! Restart
     else
-       call ESMF_LogWrite('hycom_nuopc ERROR: unknown starttype',  &
-          ESMF_LOGMSG_ERROR, rc=rc)
-       rc = ESMF_RC_OBJ_BAD
-       return
-    end if
+      l_startTime_r8=-startTime_r8  ! Coldstart
+    endif
+
+! This used to be parameters from CESM module seq_infodata_mod
 
     ! Get the pointer restart name !!Alex
       !restart_write = .true. TAR NEEDED for averaged output.
 
     call ESMF_LOGWRITE("BEFORE HYCOM_INIT", ESMF_LOGMSG_INFO, rc=rc)
     ! -->> call into HYCOM <<--
-    call HYCOM_Init(mpi_Comm, & 
+    call HYCOM_Init(mpi_comm, & 
        hycom_start_dtg=l_startTime_r8, hycom_end_dtg=stopTime_r8)
 !tar        restart_write=restart_write)
 
@@ -477,28 +468,6 @@ module hycom_cap
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-    ! Get start type run : start-up or continuous run !!Alex add restFlag
-    !call ESMF_AttributeGet(exportState, name="start_type", value=starttype, rc=rc)
-    !if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-    !  line=__LINE__, &
-    !  file=__FILE__)) &
-    !return ! bail out
-    starttype='continue'
-    if (     trim(starttype) == trim("startup")) then
-!       l_startTime_r8=-startTime_r8
-       restFlag = .false.
-    else if (trim(starttype) == trim("continue")) then
-!       l_startTime_r8=startTime_r8
-       restFlag = .true.
-    else if (trim(starttype) == trim("branch")) then
-!       l_startTime_r8=startTime_r8
-       restFlag = .true.
-    else
-       call ESMF_LogWrite('hycom_nuopc ERROR: unknown starttype',  &
-          ESMF_LOGMSG_ERROR, rc=rc)
-       rc = ESMF_RC_OBJ_BAD
-       return
-    end if
 
     !TODO: don't need the additional initialization step once data-dependency
     !TODO: is taken care of during initialize.
@@ -735,7 +704,6 @@ module hycom_cap
 
     real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sst(:,:)
     real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sss(:,:)
-    real(kind=ESMF_KIND_R8), pointer  :: dataPtr_ssh(:,:)
     real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sssz(:,:)
     real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sssm(:,:)
     real(kind=ESMF_KIND_R8), pointer  :: dataPtr_ocncz(:,:) 
@@ -756,8 +724,6 @@ module hycom_cap
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
     call State_getFldPtr(st,'freezing_melting_potential',dataPtr_fmpot,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call State_getFldPtr(st,'sea_level',dataPtr_ssh,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
 
     cplfrq = nint( ocn_cpl_frq*(86400.0/baclin) )
     if (.not. initFlag) then
@@ -773,7 +739,6 @@ module hycom_cap
           ssfi = (tfrz-tmxl)*t2f       !W/m^2 into ocean
           frzh     (i,j) = max(-1000.0,min(1000.0,ssfi)) ! > 0. freezing potential of flxice
           dataPtr_fmpot(i,j) = max(-1000.0,min(1000.0,ssfi))
-          dataPtr_ssh(i,j)   =  srfhgt(i,j)/g   !sshm(i,j)/g
         enddo
       enddo
     else
@@ -781,7 +746,6 @@ module hycom_cap
       dataPtr_fmpot(:,:) = 0.
       dataPtr_sst(:,:)   = 0.
       dataPtr_sss(:,:)   = 0.
-      dataPtr_ssh(:,:)   = 0.
     endif
 
     call State_getFldPtr(st,'sea_surface_slope_zonal',dataPtr_sssz,rc=rc)
@@ -894,7 +858,6 @@ module hycom_cap
 ! instead, create space for the field when it's "realized".
    call fld_list_add(fldsFrOcn_num,fldsFrOcn,"sea_surface_temperature"       ,"k"  ,"will provide")
    call fld_list_add(fldsFrOcn_num,fldsFrOcn,"sea_surface_salinity"          ,"1"  ,"will provide")
-   call fld_list_add(fldsFrOcn_num,fldsFrOcn,"sea_level"                     ,"m"  ,"will provide")
    call fld_list_add(fldsFrOcn_num,fldsFrOcn,"sea_surface_slope_zonal"       ,"1"  ,"will provide")
    call fld_list_add(fldsFrOcn_num,fldsFrOcn,"sea_surface_slope_merid"       ,"1"  ,"will provide")
    call fld_list_add(fldsFrOcn_num,fldsFrOcn,"ocn_current_zonal"             ,"m/s","will provide")
@@ -1000,7 +963,7 @@ module hycom_cap
     ! local variables
     type(ESMF_Field) :: lfield
     integer :: lrc
-    character(len=*),parameter :: subname='(cice_cap:State_GetFldPtr)'
+    character(len=*),parameter :: subname='(hycom_cap:State_GetFldPtr)'
    
     call ESMF_StateGet(ST, itemName=trim(fldname), field=lfield, rc=lrc)
     if (ESMF_LogFoundError(rcToCheck=lrc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
