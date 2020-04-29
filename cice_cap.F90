@@ -26,7 +26,7 @@ module cice_cap
 !end cice specific
   use ESMF
   use NUOPC
-  use mod_nuopc_options, only: esmf_write_diagnostics, ice_petCount
+  use mod_nuopc_options, only: esmf_write_diagnostics, ice_petCount, profile_memory
   use NUOPC_Model, &
     model_routine_SS      => SetServices, &
     model_label_SetClock  => label_SetClock, &
@@ -69,8 +69,6 @@ module cice_cap
   character(len=2048):: info
   logical :: isPresent
   integer :: dbrc     ! temporary debug rc value
-
-  logical :: profile_memory = .true.
 
   contains
   !-----------------------------------------------------------------------------
@@ -820,7 +818,6 @@ module cice_cap
 ! WILL PROVIDE means that field has its own grid. Can be changed to accept grid from outside
     call fld_list_add(fldsToIce_num, fldsToIce, "sea_surface_temperature"         ,"K"   , "will provide")
     call fld_list_add(fldsToIce_num, fldsToIce, "sea_surface_salinity"            ,"1"   , "will provide")
-    call fld_list_add(fldsToIce_num, fldsToIce, "sea_level"                       ,"m"   , "will provide")
     call fld_list_add(fldsToIce_num, fldsToIce, "sea_surface_slope_zonal"         ,"1"   , "will provide")
     call fld_list_add(fldsToIce_num, fldsToIce, "sea_surface_slope_merid"         ,"1"   , "will provide")
     call fld_list_add(fldsToIce_num, fldsToIce, "ocn_current_zonal"               ,"m/s" , "will provide")
@@ -892,7 +889,6 @@ module cice_cap
     integer, intent(out) :: rc
     real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sst(:,:,:)
     real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sss(:,:,:)
-    real(kind=ESMF_KIND_R8), pointer  :: dataPtr_ssh(:,:,:)
     real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sssz(:,:,:)
     real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sssm(:,:,:)
     real(kind=ESMF_KIND_R8), pointer  :: dataPtr_ocncz(:,:,:)
@@ -908,8 +904,6 @@ module cice_cap
     call State_getFldPtr(st,'sea_surface_temperature',dataPtr_sst,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
     call State_getFldPtr(st,'sea_surface_salinity',dataPtr_sss,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call State_getFldPtr(st,'sea_level',dataPtr_ssh,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
     call State_getFldPtr(st,'sea_surface_slope_zonal',dataPtr_sssz,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
@@ -978,8 +972,6 @@ module cice_cap
     type(block)                            :: this_block
     character(len=*),parameter  :: subname='(cice_cap:CICE_Export)'
 !TODO clean up fields
-!    call State_getFldPtr(st,'ice_mask',dataPtr_mask,rc=rc)
-!    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
     call State_getFldPtr(st,'sea_ice_fraction',dataPtr_ifrac,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
     call State_getFldPtr(st,'sea_ice_temperature',dataPtr_itemp,rc=rc)
@@ -1008,7 +1000,6 @@ module cice_cap
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
     dataPtr_ifrac = 0._ESMF_KIND_R8
     dataPtr_itemp = 0._ESMF_KIND_R8
-!    dataPtr_mask = 0._ESMF_KIND_R8
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
     do iblk = 1,nblocks
       this_block = get_block(blocks_ice(iblk),iblk)
@@ -1020,7 +1011,6 @@ module cice_cap
         do i = ilo,ihi
           i1 = i - ilo + 1
           j1 = j - jlo + 1
-!          if (hm(i,j,iblk) > 0.5) dataPtr_mask(i1,j1,iblk) = 1._ESMF_KIND_R8
           dataPtr_ifrac   (i1,j1,iblk) = aice(i,j,iblk)   ! ice fraction (0-1)
           dataPtr_fhocn    (i1,j1,iblk) = fhocn(i,j,iblk)   ! heat exchange with ocean
           dataPtr_fresh    (i1,j1,iblk) = fresh(i,j,iblk)   ! fresh water to ocean
@@ -1036,8 +1026,6 @@ module cice_cap
         enddo
       enddo
     enddo
-!    write(tmpstr,*) subname//' mask = ',minval(dataPtr_mask),maxval(dataPtr_mask)
-!    call ESMF_LogWrite(trim(tmpstr), ESMF_LOGMSG_INFO, rc=dbrc)
 
   end subroutine CICE_Export
 
