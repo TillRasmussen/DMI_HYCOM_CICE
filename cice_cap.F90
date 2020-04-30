@@ -11,6 +11,7 @@ module cice_cap
 ! cice specific
   use ice_blocks, only: nx_block, ny_block, nblocks_tot, block, get_block, &
                         get_block_parameter
+  use ice_broadcast, only: broadcast_scalar
   use ice_domain_size, only: max_blocks, nx_global, ny_global
   use ice_domain, only: nblocks, blocks_ice, distrb_info
   use ice_distribution, only: ice_distributiongetblockloc
@@ -114,7 +115,6 @@ module cice_cap
       file=__FILE__)) &
       return  ! bail out
 
-
     call NUOPC_CompSpecialize(gcomp, specLabel=model_label_Finalize, &
       specRoutine=cice_model_finalize, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -132,8 +132,8 @@ module cice_cap
     type(ESMF_Clock)     :: clock
     integer, intent(out) :: rc
     ! Local Variables
-    type(ESMF_VM)                          :: vm
-    integer                                :: mpi_comm
+    type(ESMF_VM)        :: vm
+    integer              :: mpi_comm, me, npes
     character(len=*),parameter  :: subname='(cice_cap:InitializeAdvertise)'
     rc = ESMF_SUCCESS
     call ESMF_VMGetCurrent(vm, rc=rc)
@@ -141,6 +141,9 @@ module cice_cap
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
+
+    call ESMF_VMGet(vm,localPet=me,petCount=npes)
+    if (me==0) print *,"DMI_CPL: CICE InitializeAdvertise started"
 
     call ESMF_VMGet(vm, mpiCommunicator=mpi_comm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -163,6 +166,8 @@ module cice_cap
 
     write(info,*) subname,' --- initialization phase 1 completed --- '
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
+
+    if (me==0) print *,"DMI_CPL: CICE InitializeAdvertise finished"
 
   end subroutine InitializeAdvertise
   
@@ -201,27 +206,14 @@ module cice_cap
     real(ESMF_KIND_R8), pointer :: coordYcorner(:,:)
     integer(ESMF_KIND_I4), pointer :: gridmask(:,:)
     real(ESMF_KIND_R8), pointer :: gridarea(:,:)
+    integer                     ::  tblocks_tmp    ,&! total number of blocks
+                                    nblocks_tmp      ! temporary value of nblocks
     character(len=*),parameter  :: subname='(cice_cap:InitializeRealize)'
 
     rc = ESMF_SUCCESS
 
     ! We can check if npet is 4 or some other value to make sure
     ! CICE is configured to run on the correct number of processors.
-
-    ! Check if requested PES is equal to CICE required
-    call ESMF_VMGetGlobal(vm=vm, rc=rc)
-    call ESMF_VMGet (vm, localPet=me, petCount=npet)
-    if (me==0) then
-      write(6,*)'DMI_CPL: Required CICE pes: nblocks_tot:', nblocks_tot
-    endif
-    call flush(6)
-    if (nblocks_tot /= ice_petCount) then
-      if (me==0) write(6,*) &
-                  'DMI_CPL: ERROR: Required CICE pes not equal to requested ice_petCount:', &
-                   nblocks_tot, ice_petCount
-      call flush(6)
-      call exit(9)  ! bail out
-    endif
 
     ! create a Grid object for Fields
     ! we are going to create a single tile displaced pole grid from a gridspec
@@ -272,6 +264,25 @@ module cice_cap
 !!!TAR ADDED 141119
     delayout = ESMF_DELayoutCreate(petMap(1:peIDCount), rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
+
+    ! Check if requested PES is equal to CICE required
+    call ESMF_VMGetGlobal(vm=vm, rc=rc)
+    call ESMF_VMGet (vm, localPet=me, petCount=npet)
+    if (me==0) write(6,*)'DMI_CPL: Requested CICE ice_petCount:    ', ice_petCount
+    tblocks_tmp = 0
+    do n=0,distrb_info%nprocs - 1
+      nblocks_tmp=size(blocks_ice)
+      call broadcast_scalar(nblocks_tmp, n)
+      tblocks_tmp = tblocks_tmp + nblocks_tmp
+    end do
+    if (me==0) write(6,*)'DMI_CPL: Required CICE Npet: tblocks_tmp:', tblocks_tmp
+    if (tblocks_tmp /= ice_petCount) then
+      if (me==0) &
+        write(6,*)'DMI_CPL: ERROR: Required CICE Npet not equal to requested ice_petCount:'
+      call flush(6)
+      call ESMF_Finalize(endflag=ESMF_END_ABORT)
+    endif
+    call flush(6)
 
 !tarnotglobal    allocate(connectionList(2))
     ! bipolar boundary condition at top row: nyg
@@ -549,9 +560,9 @@ module cice_cap
     type(ESMF_VM) :: vm
     integer       :: me, npes
     character(len=*),parameter  :: subname='(cice_cap:ModelAdvance)'
-
     rc = ESMF_SUCCESS
-    if(profile_memory) call ESMF_VMLogMemInfo("Entering CICE Model_ADVANCE: ")
+    if (profile_memory) call ESMF_VMLogMemInfo("Entering CICE Model_ADVANCE: ")
+
     write(info,*) subname,' --- run phase 1 called --- '
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
     import_slice = import_slice + 1
@@ -577,7 +588,7 @@ module cice_cap
     call ESMF_VMGetGlobal(vm=vm, rc=rc)
     call ESMF_VMGet (vm, localPet=me, petCount=npes)
     if (me==0) call ESMF_ClockPrint(clock, options="currTime", &
-                     preString="DMI_CPL: -->Advancing CICE from: ", rc=rc)
+      preString="DMI_CPL: -->Advancing CICE from: ", rc=rc)
 
     call ESMF_ClockGet(clock, currTime=currTime, timeStep=timeStep, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -590,17 +601,18 @@ module cice_cap
 
     call CICE_Import(importState,rc)
     if (esmf_write_diagnostics >0) then
-       if (mod(import_slice,esmf_write_diagnostics)==0) then
-          call nuopc_write(state=importState,filenamePrefix='Import_CICE', &
+      if (mod(import_slice,esmf_write_diagnostics)==0) then
+        call nuopc_write(state=importState,filenamePrefix='Import_CICE', &
                          timeslice=import_slice/esmf_write_diagnostics,rc=rc)
-       endif
+      endif
     endif  ! write_diagnostics
+
     write(info,*) subname,' --- run phase 2 called --- '
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
-    if(profile_memory) call ESMF_VMLogMemInfo("Before CICE_Run")
+    if (profile_memory) call ESMF_VMLogMemInfo("Before CICE_Run")
     call CICE_Run
+    if (profile_memory) call ESMF_VMLogMemInfo("After CICE_Run")
 
-    if(profile_memory) call ESMF_VMLogMemInfo("After CICE_Run")
     write(info,*) subname,' --- run phase 3 called --- '
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
 
@@ -617,7 +629,7 @@ module cice_cap
     !call state_diagnose(exportState, 'cice_export', rc)
     write(info,*) subname,' --- run phase 4 called --- ',rc
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
-    if(profile_memory) call ESMF_VMLogMemInfo("Leaving CICE Model_ADVANCE: ")
+    if (profile_memory) call ESMF_VMLogMemInfo("Leaving CICE Model_ADVANCE: ")
 
     !call flush(6)
   end subroutine ModelAdvance

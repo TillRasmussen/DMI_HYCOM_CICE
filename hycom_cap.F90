@@ -127,8 +127,8 @@ module hycom_cap
 
     character(len=*),parameter  :: subname='(HYCOM_cap:InitializeAdvertise)'
     rc = ESMF_SUCCESS
-    call ESMF_VMGetCurrent(vm, rc=rc)
 
+    call ESMF_VMGetCurrent(vm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
@@ -168,12 +168,12 @@ module hycom_cap
 
     call ESMF_VMGet(vm,localPet=me,petCount=npes)
     if (me==0) then
-      print *, "DMI_CPL: HYCOM_INIT -->> startTime_r8=", startTime_r8
-      print *, "DMI_CPL:                  stopTime_r8=", stopTime_r8
+      print *,"DMI_CPL: HYCOM_INIT -->> startTime_r8=", startTime_r8
+      print *,"DMI_CPL:                  stopTime_r8=", stopTime_r8
     endif
 
     ! get coupling frequency from ocean clock for 1st export
-     call ESMF_ClockGet(clock, timeStep=timeStep, rc=rc)
+    call ESMF_ClockGet(clock, timeStep=timeStep, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
@@ -201,6 +201,7 @@ module hycom_cap
 !tar        restart_write=restart_write)
 
     call ESMF_LOGWRITE("AFTER HYCOM_INIT", ESMF_LOGMSG_INFO, rc=rc)
+    if (me==0) print *,"DMI_CPL: HYCOM_INIT finished"
 
     ! set Component name so it becomes identifiable
 #ifdef TARNOTNEEDED
@@ -222,6 +223,8 @@ module hycom_cap
       return
     write(info,*) subname,' --- initialization phase 1 completed --- '
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=rc)
+
+    if (me==0) print *,"DMI_CPL: HYCOM InitializeAdvertise finished"
       
   end subroutine InitializeAdvertise
 
@@ -392,17 +395,23 @@ module hycom_cap
     character(len=32)           :: starttype            ! infodata start type
     logical                     :: restFlag = .false.
     character(len=128)          :: msg
-    character(len=*),parameter  :: subname='(HYCOM_cap:Model Advance)'
     character*80 :: filenc !!Alex
+    type(ESMF_VM)               :: vm
+    integer                     :: me, npes
+    character(len=*),parameter  :: subname='(HYCOM_cap:Model Advance)'
+
+    call ESMF_VMGet(vm,localPet=me,petCount=npes)
+    if (me==0) print *,"DMI_CPL: HYCOM ModelAdvance started"
+
     rc = ESMF_SUCCESS
-    if(profile_memory) call ESMF_VMLogMemInfo("Entering HYCOM Model_ADVANCE: ")
+    if (profile_memory) call ESMF_VMLogMemInfo("Entering HYCOM Model_ADVANCE: ")
+
     write(info,*) subname,' --- run phase 1 called --- '
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=rc)
   
-
     ! Get the internal state from Component.
 #ifdef tarnotneeded
-   ! query the Component for its clock, importState and exportState
+    ! query the Component for its clock, importState and exportState
     call ESMF_GridCompGet(gcomp, clock=clock, importState=importState, &
       exportState=exportState, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -453,13 +462,13 @@ module hycom_cap
       return  ! bail out
     endTime_r8 = endTime_r8 + ocn_cpl_frq
     ! Import data to HYCOM native structures through glue fields.
-     if (esmf_write_diagnostics >0) then
-        if (mod(import_slice,esmf_write_diagnostics)==0) then
-          call nuopc_write(state=importState,filenamePrefix='Import_HYCOM', &
-                          timeslice=import_slice/esmf_write_diagnostics,rc=rc)
-        endif
-     endif
-     call HYCOM_Import(ImportState,.false.,rc)
+    if (esmf_write_diagnostics >0) then
+      if (mod(import_slice,esmf_write_diagnostics)==0) then
+        call nuopc_write(state=importState,filenamePrefix='Import_HYCOM', &
+          timeslice=import_slice/esmf_write_diagnostics,rc=rc)
+      endif
+    endif
+    call HYCOM_Import(ImportState,.false.,rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
@@ -489,23 +498,29 @@ module hycom_cap
 !      CALL HYCOM_Run(endtime=real(endTime_r8,4),pointer_filename=pointer_filename, restart_write=restart_write) ! -->> call into HYCOM <<--
 !      if (end_of_run .or. end_of_run_cpl) exit
 !    enddo
-       CALL HYCOM_Run(endtime=endTime_r8,restart_write=restart_write)
+
+    if (profile_memory) call ESMF_VMLogMemInfo("Before HYCOM_Run")
+    CALL HYCOM_Run(endtime=endTime_r8,restart_write=restart_write)
+    if (profile_memory) call ESMF_VMLogMemInfo("After HYCOM_Run")
     ! Export HYCOM native data through the glue fields.
     call HYCOM_export(exportstate,.false.,rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-     if (esmf_write_diagnostics >0) then
-        if (mod(export_slice,esmf_write_diagnostics)==0) then
-           call nuopc_write(state=exportstate,filenamePrefix='Export_HYCOM',&
-                           timeslice=export_slice/esmf_write_diagnostics,rc=rc)
-        endif
-     endif
+    if (esmf_write_diagnostics >0) then
+      if (mod(export_slice,esmf_write_diagnostics)==0) then
+        call nuopc_write(state=exportstate,filenamePrefix='Export_HYCOM',&
+          timeslice=export_slice/esmf_write_diagnostics,rc=rc)
+      endif
+    endif
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
+
+    if (profile_memory) call ESMF_VMLogMemInfo("Leaving HYCOM Model_ADVANCE: ")
+
   end subroutine ModelAdvance
 
   !-----------------------------------------------------------------------------

@@ -1,6 +1,7 @@
 module mod_nuopc_options
   implicit none
-  logical,save,public        :: nuopc_restart, profile_memory  ! If true model will restart from 
+  logical,save,public        :: nuopc_restart  ! If true HYCOM will do a restart. Else Coldstart 
+  logical,save,public        :: profile_memory ! If true Profiling around {cice,hycom}_run 
   
   integer(4), save, public   :: nuopc_tinterval       ! coupling interval 
   integer(4), dimension(4), save, public :: tstart, tend !year, month, day and hour

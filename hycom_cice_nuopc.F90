@@ -49,12 +49,15 @@ program hycom_cice_nuopc
     call ESMF_Finalize(endflag=ESMF_END_ABORT)
 
   ! Create the earth system Component
+  call ESMF_LogWrite("GridCompCreate", ESMF_LOGMSG_INFO, rc=rc)
   esmComp = ESMF_GridCompCreate(name="esm", rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
     line=__LINE__, &
     file=__FILE__)) &
     call ESMF_Finalize(endflag=ESMF_END_ABORT)
+
   ! SetServices for the earth system Component
+  call ESMF_LogWrite("GridCompSetServices", ESMF_LOGMSG_INFO, rc=rc)
   call ESMF_GridCompSetServices(esmComp, esmSS, userRc=urc, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
     line=__LINE__, &
@@ -64,7 +67,9 @@ program hycom_cice_nuopc
     line=__LINE__, &
     file=__FILE__)) &
     call ESMF_Finalize(endflag=ESMF_END_ABORT)
+
   ! Call Initialize for the earth system Component
+  call ESMF_LogWrite("GridCompInitialize", ESMF_LOGMSG_INFO, rc=rc)
   call ESMF_GridCompInitialize(esmComp, userRc=urc, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
     line=__LINE__, &
@@ -75,7 +80,8 @@ program hycom_cice_nuopc
     file=__FILE__)) &
     call ESMF_Finalize(endflag=ESMF_END_ABORT)
   
-  ! Call Run  for earth the system Component
+  ! Call Run for earth the system Component
+  call ESMF_LogWrite("GridCompRun", ESMF_LOGMSG_INFO, rc=rc)
   call ESMF_GridCompRun(esmComp, userRc=urc, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
     line=__LINE__, &
@@ -87,6 +93,7 @@ program hycom_cice_nuopc
     call ESMF_Finalize(endflag=ESMF_END_ABORT)
   
   ! Call Finalize for the earth system Component
+  call ESMF_LogWrite("GridCompFinalize", ESMF_LOGMSG_INFO, rc=rc)
   call ESMF_GridCompFinalize(esmComp, userRc=urc, rc=rc)
   if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
     line=__LINE__, &
