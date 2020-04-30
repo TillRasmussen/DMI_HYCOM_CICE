@@ -25,7 +25,6 @@ program hycom_cice_nuopc
   integer                 :: rc, urc
   type(ESMF_GridComp)     :: esmComp
   
-  call ESMF_LogWrite("HYCOM CICE Initialize started", ESMF_LOGMSG_INFO, rc=rc)
   ! Initialize ESMF
 #ifdef logerror
    call ESMF_Initialize(logkindflag=ESMF_LOGKIND_MULTI_ON_ERROR, &
