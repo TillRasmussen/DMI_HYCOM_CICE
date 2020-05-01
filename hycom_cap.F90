@@ -122,13 +122,13 @@ module hycom_cap
     TYPE(ESMF_Time)             :: startTime, stopTime, hycomRefTime, currTime
     TYPE(ESMF_TimeInterval)     :: interval,timeStep
     real(ESMF_KIND_R8)          :: startTime_r8, stopTime_r8, l_startTime_r8
-    character(len=32)           :: starttype            ! infodata start type
-    logical                     :: restFlag = .false.        ! initial/restart run (F/T)
+!    character(len=32)           :: starttype            ! infodata start type
+!    logical                     :: restFlag = .false.        ! initial/restart run (F/T)
 
     character(len=*),parameter  :: subname='(HYCOM_cap:InitializeAdvertise)'
     rc = ESMF_SUCCESS
-
-    call ESMF_VMGetCurrent(vm, rc=rc)
+    call ESMF_GridCompGet(gcomp, vm=vm, localPet=me,petCount=npes, rc=rc)
+!    call ESMF_VMGetCurrent(vm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
@@ -166,7 +166,7 @@ module hycom_cap
       file=__FILE__)) &
       return  ! bail out
 
-    call ESMF_VMGet(vm,localPet=me,petCount=npes)
+!    call ESMF_VMGet(vm,localPet=me,petCount=npes)
     if (me==0) then
       print *,"DMI_CPL: HYCOM_INIT -->> startTime_r8=", startTime_r8
       print *,"DMI_CPL:                  stopTime_r8=", stopTime_r8
@@ -251,8 +251,8 @@ module hycom_cap
     type(InternalState)         :: is
     integer                     :: stat
     type(ESMF_CALKIND_FLAG)     :: calkind
-    logical                     :: restFlag = .false.        ! initial/restart run (F/T)
-    character(len=32)           :: starttype
+!    logical                     :: restFlag = .false.        ! initial/restart run (F/T)
+!    character(len=32)           :: starttype
     character(len=80)           :: pointer_filename          ! restart pointer file !!Alex
     logical                     :: restart_write = .false.   ! write restart
     character(len=*),parameter  :: subname='(HYCOM_cap:InitializeRealize)'   
@@ -392,19 +392,29 @@ module hycom_cap
     type(ESMF_Field)            :: field
     character(len=80)           :: pointer_filename     ! restart pointer file !!Alex
     logical                     :: restart_write = .false.
-    character(len=32)           :: starttype            ! infodata start type
-    logical                     :: restFlag = .false.
+!    character(len=32)           :: starttype            ! infodata start type
+!    logical                     :: restFlag = .false.
     character(len=128)          :: msg
     character*80 :: filenc !!Alex
     type(ESMF_VM)               :: vm
     integer                     :: me, npes
     character(len=*),parameter  :: subname='(HYCOM_cap:Model Advance)'
 
-    call ESMF_VMGet(vm,localPet=me,petCount=npes)
+    rc = ESMF_SUCCESS
+    call ESMF_GridCompGet(gcomp,vm=vm,localPet=me,petCount=npes, rc=rc)    
+!    call ESMF_VMGet(vm,localPet=me,petCount=npes, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+
     if (me==0) print *,"DMI_CPL: HYCOM ModelAdvance started"
 
-    rc = ESMF_SUCCESS
-    if (profile_memory) call ESMF_VMLogMemInfo("Entering HYCOM Model_ADVANCE: ")
+    if (profile_memory) call ESMF_VMLogMemInfo("Entering HYCOM Model_ADVANCE: ", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
 
     write(info,*) subname,' --- run phase 1 called --- '
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=rc)
@@ -419,8 +429,7 @@ module hycom_cap
       file=__FILE__)) &
       return  ! bail out
 
-    call ESMF_GridCompGetInternalState(gcomp, is, rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+    call ESMF_GridCompGetInternalState(gcomp, is, rc    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out

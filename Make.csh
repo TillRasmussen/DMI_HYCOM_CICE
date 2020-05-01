@@ -18,7 +18,7 @@ else
   set compiler = gnu
 endif
 #OPTIONS
-setenv CPPFLAGS -DNone # can be logmulti, logerror. Alternatively log is set to none
+setenv CPPFLAGS '-Dlogerror' # can be logmulti, logerror. Alternatively log is set to none
 setenv debug false # can be true or false
 echo $compiler
 setenv v_esmf v8_0_0 # alternatively v7_1_0r/esmf
