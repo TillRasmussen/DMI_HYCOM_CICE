@@ -11,7 +11,6 @@ module cice_cap
 ! cice specific
   use ice_blocks, only: nx_block, ny_block, nblocks_tot, block, get_block, &
                         get_block_parameter
-  use ice_broadcast, only: broadcast_scalar
   use ice_domain_size, only: max_blocks, nx_global, ny_global
   use ice_domain, only: nblocks, blocks_ice, distrb_info
   use ice_distribution, only: ice_distributiongetblockloc
@@ -145,7 +144,6 @@ module cice_cap
       file=__FILE__)) &
       return  ! bail out
     call esmf_GridCompGet(gcomp,vm=vm,localPet=me,petCount=npes)
-!    call ESMF_VMGet(vm,localPet=me,petCount=npes)
     if (me==0) print *,"DMI_CPL: CICE InitializeAdvertise started"
     call ESMF_VMGet(vm, mpiCommunicator=mpi_comm, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -208,8 +206,6 @@ module cice_cap
     real(ESMF_KIND_R8), pointer :: coordYcorner(:,:)
     integer(ESMF_KIND_I4), pointer :: gridmask(:,:)
     real(ESMF_KIND_R8), pointer :: gridarea(:,:)
-    integer                     ::  tblocks_tmp    ,&! total number of blocks
-                                    nblocks_tmp      ! temporary value of nblocks
     character(len=*),parameter  :: subname='(cice_cap:InitializeRealize)'
 
     rc = ESMF_SUCCESS
@@ -273,27 +269,34 @@ module cice_cap
     delayout = ESMF_DELayoutCreate(petMap(1:peIDCount), rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
 
-    ! Check if requested PES is equal to CICE required
-    if (me==0) write(6,*)'DMI_CPL: Requested CICE ice_petCount:    ', peIDCount, nblocks_tot
-    call flush(6)
-!    tblocks_tmp = 0
-!    do n=0,distrb_info%nprocs - 1
-!      nblocks_tmp=size(blocks_ice)
-!      call broadcast_scalar(nblocks_tmp, n)
-!      tblocks_tmp = tblocks_tmp + nblocks_tmp
-!    end do
-!    if (me==0) write(6,*)'DMI_CPL: Required CICE Npet: tblocks_tmp:', tblocks_tmp, peIDCount
-    if (peIDCount /= nblocks_tot) then
-       call ESMF_LogWrite('DMI_CPL: ERROR: Required CICE peIDCount not equal to requested nblocks_tot',  &
-          ESMF_LOGMSG_ERROR, rc=rc)
-       rc = ESMF_RC_OBJ_BAD
-!       if (me==0) &
-!          write(6,*)'DMI_CPL: ERROR: Required CICE Npet not equal to requested ice_petCount:'
-!       call flush(6)
-       return
-      !call ESMF_Finalize(endflag=ESMF_END_ABORT)
+    ! Check CICE allocated PES
+    if (me==0) then
+      write(6,*)'DMI_CPL: Requested PES: ice_petCount     ',ice_petCount
+      write(6,*)'DMI_CPL: CICE allocated PES: nblocks_tot:',nblocks_tot
+      write(6,*)'DMI_CPL: CICE used PES: peIDCount:       ',peIDCount
     endif
-    call flush(6)
+    if (peIDCount /= nblocks_tot) then
+      if (me==0) then
+        write(6,*)'DMI_CPL: ERROR: Required CICE peIDCount not equal to CICE allocated nblocks_tot.'
+        write(6,*)'DMI_CPL:          It is required for coupled runs.'
+        write(6,*)'DMI_CPL: TIP: Adjust block_size_{x,y}, processor_shape and/or distribution_type in ice_in file.'
+      endif
+      call ESMF_LogWrite('DMI_CPL: ERROR: Required CICE peIDCount not equal to CICE allocated nblocks_tot', &
+        ESMF_LOGMSG_ERROR, rc=rc)
+      rc = ESMF_RC_OBJ_BAD
+      return
+    else if (peIDCount /= nblocks_tot) then
+      if (me==0) then
+        write(6,*)'DMI_CPL: ERROR: Required CICE peIDCount not equal to requested ice_petCount'
+        write(6,*)'DMI_CPL: TIP:     Adjust ice_petCount in nuopc_nml file'
+      endif
+      call ESMF_LogWrite('DMI_CPL: ERROR: Required CICE peIDCount not equal to requested ice_petCount:', &
+        ESMF_LOGMSG_ERROR, rc=rc)
+      rc = ESMF_RC_OBJ_BAD
+      return
+    else
+      if (me==0) write(6,*)'DMI_CPL: peIDCount equals requested ice_petCount: OK'
+    endif
 
 !tarnotglobal    allocate(connectionList(2))
     ! bipolar boundary condition at top row: nyg
