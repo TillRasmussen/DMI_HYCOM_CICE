@@ -408,8 +408,6 @@ module hycom_cap
       file=__FILE__)) &
       return  ! bail out
 
-    if (me==0) print *,"DMI_CPL: HYCOM ModelAdvance started"
-
     if (profile_memory) call ESMF_VMLogMemInfo("Entering HYCOM Model_ADVANCE: ", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
