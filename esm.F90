@@ -55,7 +55,7 @@ module ESM
       file=__FILE__)) &
       return  ! bail out
 
-! set verbosity on driver
+    ! set verbosity on driver
     call NUOPC_CompAttributeSet(driver, name="Verbosity", value="max", rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
@@ -95,8 +95,10 @@ module ESM
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
-! call namelist coupled
+
+    ! call namelist coupled
     call nuopc_opt()
+
     ! SetServices for CICE with petList on first half of PETs
      allocate(petList(ice_petCount))
      do i=1,ice_petCount
@@ -157,8 +159,8 @@ module ESM
       line=__LINE__, &
       file=__FILE__)) &
       return  ! bail out
+
     ! set the driver clock
-!    call nuopc_opt()
     call ESMF_TimeIntervalSet(timeStep, s=nuopc_tinterval, rc=rc) ! 3 minute steps
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
