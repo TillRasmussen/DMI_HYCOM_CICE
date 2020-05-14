@@ -99,10 +99,28 @@ module ESM
     ! call namelist coupled
     call nuopc_opt()
 
-    ! SetServices for CICE with petList on first half of PETs
+    ! SetServices for OCN with petList on first half of PETs
+    allocate(petList(ocn_petCount))
+    do i=1,ocn_petCount
+      petList(i)=i-1
+    enddo
+    call NUOPC_DriverAddComp(driver, "HYCOM", ocnSS, petList=petList, &
+      comp=child, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    call NUOPC_CompAttributeSet(child, name="Verbosity", value="high", rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    deallocate(petList)
+
+    ! SetServices for CICE with petList on second half of PETs
      allocate(petList(ice_petCount))
      do i=1,ice_petCount
-        petList(i)=i-1
+        petList(i)=ocn_petCount+i-1
      enddo
     call NUOPC_DriverAddComp(driver, "CICE", iceSS,petList=petList, &
       comp=child, rc=rc) !tar comment not sure why comp needs to be a child
@@ -117,23 +135,7 @@ module ESM
       return  ! bail out
     deallocate(petList)
     
-    ! SetServices for OCN with petList on second half of PETs
-    allocate(petList(ocn_petCount))
-    do i=1,ocn_petCount
-      petList(i)=ice_petCount+i-1
-    enddo
-    call NUOPC_DriverAddComp(driver, "HYCOM", ocnSS, petList=petList, &
-      comp=child, rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    call NUOPC_CompAttributeSet(child, name="Verbosity", value="high", rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
-      line=__LINE__, &
-      file=__FILE__)) &
-      return  ! bail out
-    deallocate(petList)
+
     ! SetServices for cice2ocn
     call NUOPC_DriverAddComp(driver, srcCompLabel="CICE", dstCompLabel="HYCOM", &
       compSetServicesRoutine=cplSS, comp=connector, rc=rc)
