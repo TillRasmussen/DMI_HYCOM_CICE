@@ -275,6 +275,16 @@ module cice_cap
       write(6,*)'DMI_CPL: CICE allocated PES: nblocks_tot:',nblocks_tot
       write(6,*)'DMI_CPL: CICE used PES: peIDCount:       ',peIDCount
     endif
+    if (peIDCount /= ice_petCount) then
+      if (me==0) then
+        write(6,*)'DMI_CPL: ERROR: Required CICE peIDCount not equal to requested ice_petCount'
+        write(6,*)'DMI_CPL: TIP:     Adjust ice_petCount in nuopc_nml file'
+      endif
+      call ESMF_LogWrite('DMI_CPL: ERROR: Required CICE peIDCount not equal to requested ice_petCount:', &
+        ESMF_LOGMSG_ERROR, rc=rc)
+      rc = ESMF_RC_OBJ_BAD
+      return
+    endif
     if (peIDCount /= nblocks_tot) then
       if (me==0) then
         write(6,*)'DMI_CPL: ERROR: Required CICE peIDCount not equal to CICE allocated nblocks_tot.'
@@ -285,18 +295,8 @@ module cice_cap
         ESMF_LOGMSG_ERROR, rc=rc)
       rc = ESMF_RC_OBJ_BAD
       return
-    else if (peIDCount /= nblocks_tot) then
-      if (me==0) then
-        write(6,*)'DMI_CPL: ERROR: Required CICE peIDCount not equal to requested ice_petCount'
-        write(6,*)'DMI_CPL: TIP:     Adjust ice_petCount in nuopc_nml file'
-      endif
-      call ESMF_LogWrite('DMI_CPL: ERROR: Required CICE peIDCount not equal to requested ice_petCount:', &
-        ESMF_LOGMSG_ERROR, rc=rc)
-      rc = ESMF_RC_OBJ_BAD
-      return
-    else
-      if (me==0) write(6,*)'DMI_CPL: peIDCount equals requested ice_petCount: OK'
     endif
+    if (me==0) write(6,*)'DMI_CPL: peIDCount equals requested ice_petCount: OK'
 
 !tarnotglobal    allocate(connectionList(2))
     ! bipolar boundary condition at top row: nyg
