@@ -118,12 +118,12 @@ module ESM
     deallocate(petList)
 
     ! SetServices for CICE with petList on second half of PETs
-     allocate(petList(ice_petCount))
-     do i=1,ice_petCount
-        petList(i)=ocn_petCount+i-1
-     enddo
+    allocate(petList(ice_petCount))
+    do i=1,ice_petCount
+      petList(i)=ocn_petCount+i-1
+    enddo
     call NUOPC_DriverAddComp(driver, "CICE", iceSS,petList=petList, &
-      comp=child, rc=rc) !tar comment not sure why comp needs to be a child
+      comp=child, rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
       file=__FILE__)) &
@@ -134,7 +134,6 @@ module ESM
       file=__FILE__)) &
       return  ! bail out
     deallocate(petList)
-    
 
     ! SetServices for cice2ocn
     call NUOPC_DriverAddComp(driver, srcCompLabel="CICE", dstCompLabel="HYCOM", &
