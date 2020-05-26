@@ -278,7 +278,7 @@ module cice_cap
     if (peIDCount /= ice_petCount) then
       if (me==0) then
         write(6,*)'DMI_CPL: ERROR: Required CICE peIDCount not equal to requested ice_petCount'
-        write(6,*)'DMI_CPL: HINT:     Adjust ice_petCount in nuopc_nml file'
+        write(6,*)'DMI_CPL: TIP:     Adjust ice_petCount in nuopc_nml file'
       endif
       call ESMF_LogWrite('DMI_CPL: ERROR: Required CICE peIDCount not equal to requested ice_petCount:', &
         ESMF_LOGMSG_ERROR, rc=rc)
