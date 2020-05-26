@@ -752,7 +752,8 @@ module hycom_cap
           dataPtr_sst(i,j) = tmxl+273.15d0  ! construct SST [K]
           dataPtr_sss(i,j) = smxl           ! construct SSS
           hfrz = min( thkfrz*onem, dpbl(i,j) )
-          t2f  = (spcifh*hfrz)/(baclin*icefrq*g)
+!MHRI          t2f  = (spcifh*hfrz)/(baclin*icefrq*g)
+          t2f  = (spcifh*hfrz)/(baclin*real(icefrq)*real(icpfrq)*g)  ! icefrq,icpfrq integers
           tfrz = tfrz_0 + smxl*tfrz_s  !salinity dependent freezing point
           ssfi = (tfrz-tmxl)*t2f       !W/m^2 into ocean
           frzh     (i,j) = max(-1000.0,min(1000.0,ssfi)) ! > 0. freezing potential of flxice
@@ -831,6 +832,9 @@ module hycom_cap
    call ESMF_VMGetGlobal(vm=vm, rc=rc)
    call ESMF_VMGet (vm, localPet=me, petCount=npes)
    rc = ESMF_SUCCESS
+ 
+   !-- HYCOM CICE coupling frequency (icpfrq: number of time steps between sea-ice updates)
+   if (me==0) write(6,*)'DMI_CPL: Number of HYCOM time steps between CICE updates = ',icpfrq
 
    !nfields = size(fieldList) This should be input
    if (me==0) write(6,*)'DMI_CPL: Number of HYCOM fields = ',nfields
