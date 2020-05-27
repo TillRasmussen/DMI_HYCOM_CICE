@@ -9,7 +9,7 @@ module hycom_cap
 
   use mod_hycom_nuopc_glue
   use mod_cb_arrays_nuopc_glue
-  use mod_nuopc_options, only: esmf_write_diagnostics, nuopc_restart, profile_memory
+  use mod_nuopc_options, only: esmf_write_diagnostics, nuopc_restart, profile_memory, nuopc_tinterval
   use ESMF
   use NUOPC
   use NUOPC_Model, &
@@ -201,6 +201,24 @@ module hycom_cap
 !tar        restart_write=restart_write)
 
     call ESMF_LOGWRITE("AFTER HYCOM_INIT", ESMF_LOGMSG_INFO, rc=rc)
+
+    !-- HYCOM timesteps + HYCOM steps between ice steps
+    if (me==0) then
+      write(6,*)'DMI_CPL: HYCOM timestep: baclin = ',baclin
+      write(6,*)'DMI_CPL: HYCOM timesteps between ice update: icpfrq = ',icpfrq
+    endif
+    !-- Check timesteps
+    if ( nuopc_tinterval /= icpfrq*nint(baclin) ) then
+      if (me==0) then
+        write(6,*)'DMI_CPL: NUOPC timestep: nuopc_tinterval = ',nuopc_tinterval
+        write(6,*)'DMI_CPL: ERROR: nuopc_tinterval /= icpfrq*baclin'
+      endif
+      call ESMF_LogWrite('DMI_CPL: ERROR: HYCOM ice timesteps do not match NUOPC timestep', &
+        ESMF_LOGMSG_ERROR, rc=rc)
+      rc = ESMF_RC_OBJ_BAD
+      return
+    endif
+
     if (me==0) print *,"DMI_CPL: HYCOM_INIT finished"
 
     ! set Component name so it becomes identifiable
@@ -660,16 +678,16 @@ module hycom_cap
 !            flxice(i,j) = 0.0
             xstress     = -dataPtr_sitx(i,j) ! opposite of what ice sees
             ystress     = -dataPtr_sity(i,j) ! oppostite of what ice sees
-            pang_rev    = -pang(i,j)        ! Reverse angle
+            pang_rev    = -pang(i,j)         ! Reverse angle
             si_tx (i,j) =  xstress*cos(pang_rev) - ystress*sin(pang_rev)
             si_ty (i,j) =  xstress*sin(pang_rev) + ystress*cos(pang_rev)
             fswice(i,j) =  dataPtr_siqs(i,j) !Solar Heat Flux thru Ice to Ocean already in swflx
             sflice(i,j) =  dataPtr_sifs(i,j)*1.e3 !Ice Freezing/Melting Salt Flux
             wflice(i,j) =  dataPtr_sifw(i,j) !Ice Water Flux
-            temice(i,j) =  dataPtr_sit(i,j) !Sea Ice Temperature
-            si_t  (i,j) =  dataPtr_sit(i,j) !Sea Ice Temperature
-            thkice(i,j) =  dataPtr_sih(i,j) !Sea Ice Thickness
-            si_h  (i,j) =  dataPtr_sih(i,j) !Sea Ice Thickness
+            temice(i,j) =  dataPtr_sit(i,j)  !Sea Ice Temperature
+            si_t  (i,j) =  dataPtr_sit(i,j)  !Sea Ice Temperature
+            thkice(i,j) =  dataPtr_sih(i,j)  !Sea Ice Thickness
+            si_h  (i,j) =  dataPtr_sih(i,j)  !Sea Ice Thickness
           else
             si_tx (i,j) =  0.0 !Sea Ice X-Stress into ocean
             si_ty (i,j) =  0.0 !Sea Ice Y-Stress into ocean
@@ -756,14 +774,14 @@ module hycom_cap
           t2f  = (spcifh*hfrz)/(baclin*real(icefrq)*real(icpfrq)*g)  ! icefrq,icpfrq integers
           tfrz = tfrz_0 + smxl*tfrz_s  !salinity dependent freezing point
           ssfi = (tfrz-tmxl)*t2f       !W/m^2 into ocean
-          frzh     (i,j) = max(-1000.0,min(1000.0,ssfi)) ! > 0. freezing potential of flxice
+          frzh(i,j)          = max(-1000.0,min(1000.0,ssfi)) ! > 0. freezing potential of flxice
           dataPtr_fmpot(i,j) = max(-1000.0,min(1000.0,ssfi))
         enddo
       enddo
     else
       frzh(:,:)          = 0.
       dataPtr_fmpot(:,:) = 0.
-      dataPtr_sst(:,:)   = 0.
+      dataPtr_sst(:,:)   = 0.+273.15d0  ! construct SST [K]
       dataPtr_sss(:,:)   = 0.
     endif
 
@@ -833,9 +851,6 @@ module hycom_cap
    call ESMF_VMGet (vm, localPet=me, petCount=npes)
    rc = ESMF_SUCCESS
  
-   !-- HYCOM CICE coupling frequency (icpfrq: number of time steps between sea-ice updates)
-   if (me==0) write(6,*)'DMI_CPL: Number of HYCOM time steps between CICE updates = ',icpfrq
-
    !nfields = size(fieldList) This should be input
    if (me==0) write(6,*)'DMI_CPL: Number of HYCOM fields = ',nfields
    do i = 1, nfields

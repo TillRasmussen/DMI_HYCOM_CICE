@@ -26,7 +26,7 @@ module cice_cap
 !end cice specific
   use ESMF
   use NUOPC
-  use mod_nuopc_options, only: esmf_write_diagnostics, ice_petCount, profile_memory
+  use mod_nuopc_options, only: esmf_write_diagnostics, ice_petCount, profile_memory, nuopc_tinterval
   use NUOPC_Model, &
     model_routine_SS      => SetServices, &
     model_label_SetClock  => label_SetClock, &
@@ -152,6 +152,19 @@ module cice_cap
       return  ! bail out
     call CICE_FieldsSetup()
     call CICE_Initialize(mpi_comm)
+
+    !-- Check CICE timestep
+    if (me==0) write(6,*)'DMI_CPL: CICE timestep: dt = ',dt
+    if ( nuopc_tinterval /= nint(dt) ) then
+      if (me==0) then
+        write(6,*)'DMI_CPL: NUOPC timestep: nuopc_tinterval = ',nuopc_tinterval
+        write(6,*)'DMI_CPL: ERROR: nuopc_tinterval /= dt'
+      endif
+      call ESMF_LogWrite('DMI_CPL: ERROR: CICE timestep do not match NUOPC timestep', &
+        ESMF_LOGMSG_ERROR, rc=rc)
+      rc = ESMF_RC_OBJ_BAD
+      return
+    endif
 
     call CICE_AdvertiseFields(importState, fldsToIce_num, fldsToIce, me,rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -891,7 +904,7 @@ module cice_cap
     call fld_list_add(fldsFrIce_num, fldsFrIce, "sea_ice_temperature"             ,"1"   , "will provide") 
 !    call fld_list_add(fldsFrIce_num, fldsFrIce, "ice_mask"                        ,"1"   , "will provide")
     call fld_list_add(fldsFrIce_num, fldsFrIce, "mean_sw_pen_to_ocn"              ,"1"   , "will provide") 
-    call fld_list_add(fldsFrIce_num, fldsFrIce, "mean_fresh_water_to_ocean_rate" ,"1"   ,  "will provide")
+    call fld_list_add(fldsFrIce_num, fldsFrIce, "mean_fresh_water_to_ocean_rate"  ,"1"   , "will provide")
     call fld_list_add(fldsFrIce_num, fldsFrIce, "mean_salt_rate"                  ,"1"   , "will provide") 
     call fld_list_add(fldsFrIce_num, fldsFrIce, "net_heat_flx_to_ocn"             ,"1"   , "will provide") 
     call fld_list_add(fldsFrIce_num, fldsFrIce, "mean_ice_volume"                 ,"1"   , "will provide")
@@ -1071,12 +1084,12 @@ module cice_cap
         do i = ilo,ihi
           i1 = i - ilo + 1
           j1 = j - jlo + 1
-          dataPtr_ifrac   (i1,j1,iblk) = aice(i,j,iblk)   ! ice fraction (0-1)
-          dataPtr_fhocn    (i1,j1,iblk) = fhocn(i,j,iblk)   ! heat exchange with ocean
-          dataPtr_fresh    (i1,j1,iblk) = fresh(i,j,iblk)   ! fresh water to ocean
-          dataPtr_fsalt    (i1,j1,iblk) = fsalt(i,j,iblk)   ! salt to ocean
-          dataPtr_vice    (i1,j1,iblk) = vice(i,j,iblk)   ! sea ice volume
-          dataPtr_vsno    (i1,j1,iblk) = vsno(i,j,iblk)   ! snow volume
+          dataPtr_ifrac   (i1,j1,iblk) = aice(i,j,iblk)    ! ice fraction (0-1)
+          dataPtr_fhocn   (i1,j1,iblk) = fhocn(i,j,iblk)   ! heat exchange with ocean
+          dataPtr_fresh   (i1,j1,iblk) = fresh(i,j,iblk)   ! fresh water to ocean
+          dataPtr_fsalt   (i1,j1,iblk) = fsalt(i,j,iblk)   ! salt to ocean
+          dataPtr_vice    (i1,j1,iblk) = vice(i,j,iblk)    ! sea ice volume
+          dataPtr_vsno    (i1,j1,iblk) = vsno(i,j,iblk)    ! snow volume
           dataPtr_fswthru (i1,j1,iblk) = fswthru(i,j,iblk) ! short wave penetration through ice
           ui = strocnxT(i,j,iblk)
           vj = strocnyT(i,j,iblk)
