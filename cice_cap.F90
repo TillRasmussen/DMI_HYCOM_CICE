@@ -14,7 +14,7 @@ module cice_cap
   use ice_domain_size, only: max_blocks, nx_global, ny_global
   use ice_domain, only: nblocks, blocks_ice, distrb_info
   use ice_distribution, only: ice_distributiongetblockloc
-  use icepack_parameters, only: Tffresh, rad_to_deg
+  use icepack_parameters, only: rad_to_deg
   use ice_calendar,  only: dt
   use ice_flux
   use ice_grid, only: TLAT, TLON, ULAT, ULON, hm, tarea, ANGLET, ANGLE, &
@@ -889,7 +889,7 @@ module cice_cap
 ! instead, create space for the field when it's "realized".
 !TODO REMOVE FIELDS NOT USED TAR
 ! WILL PROVIDE means that field has its own grid. Can be changed to accept grid from outside
-    call fld_list_add(fldsToIce_num, fldsToIce, "sea_surface_temperature"         ,"K"   , "will provide")
+    call fld_list_add(fldsToIce_num, fldsToIce, "sea_surface_temperature"         ,"C"   , "will provide")
     call fld_list_add(fldsToIce_num, fldsToIce, "sea_surface_salinity"            ,"1"   , "will provide")
     call fld_list_add(fldsToIce_num, fldsToIce, "sea_surface_slope_zonal"         ,"1"   , "will provide")
     call fld_list_add(fldsToIce_num, fldsToIce, "sea_surface_slope_merid"         ,"1"   , "will provide")
@@ -901,7 +901,7 @@ module cice_cap
     call fld_list_add(fldsFrIce_num, fldsFrIce, "sea_ice_fraction"                ,"1"   , "will provide") 
     call fld_list_add(fldsFrIce_num, fldsFrIce, "stress_on_ocn_ice_zonal"         ,"1"   , "will provide") 
     call fld_list_add(fldsFrIce_num, fldsFrIce, "stress_on_ocn_ice_merid"         ,"1"   , "will provide") 
-    call fld_list_add(fldsFrIce_num, fldsFrIce, "sea_ice_temperature"             ,"1"   , "will provide") 
+    call fld_list_add(fldsFrIce_num, fldsFrIce, "sea_ice_temperature"             ,"C"   , "will provide") 
 !    call fld_list_add(fldsFrIce_num, fldsFrIce, "ice_mask"                        ,"1"   , "will provide")
     call fld_list_add(fldsFrIce_num, fldsFrIce, "mean_sw_pen_to_ocn"              ,"1"   , "will provide") 
     call fld_list_add(fldsFrIce_num, fldsFrIce, "mean_fresh_water_to_ocean_rate"  ,"1"   , "will provide")
@@ -1001,7 +1001,7 @@ module cice_cap
           i1 = i - ilo + 1
           j1 = j - jlo + 1
           sss    (i,j,iblk) = dataPtr_sss    (i1,j1,iblk)  ! sea surface salinity (maybe for mushy layer)
-          sst    (i,j,iblk) = dataPtr_sst    (i1,j1,iblk) - Tffresh  ! sea surface temp (may not be needed?)
+          sst    (i,j,iblk) = dataPtr_sst    (i1,j1,iblk)  ! sea surface temp [C] (may not be needed?)
 
           frzmlt (i,j,iblk) = dataPtr_fmpot  (i1,j1,iblk)
           ue = dataPtr_ocncz  (i1,j1,iblk)
