@@ -59,6 +59,7 @@
         
         ! ocn coupling frequency
         public icefrq         ! in time step in HYCOM
+        public icpfrq         ! number of time steps between sea-ice updates
         
         ! scalars and flags
         public g, onem, qonem, thkfrz, baclin, spcifh, pcp_fact

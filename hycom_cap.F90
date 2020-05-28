@@ -9,7 +9,7 @@ module hycom_cap
 
   use mod_hycom_nuopc_glue
   use mod_cb_arrays_nuopc_glue
-  use mod_nuopc_options, only: esmf_write_diagnostics, nuopc_restart, profile_memory
+  use mod_nuopc_options, only: esmf_write_diagnostics, nuopc_restart, profile_memory, nuopc_tinterval
   use ESMF
   use NUOPC
   use NUOPC_Model, &
@@ -201,6 +201,23 @@ module hycom_cap
 !tar        restart_write=restart_write)
 
     call ESMF_LOGWRITE("AFTER HYCOM_INIT", ESMF_LOGMSG_INFO, rc=rc)
+
+    !-- Check HYCOM timesteps + HYCOM steps between ice steps
+    if (me==0) then
+      write(6,*)'DMI_CPL: HYCOM timestep: baclin = ',baclin
+      write(6,*)'DMI_CPL: HYCOM timesteps between ice update: icpfrq = ',icpfrq
+    endif
+    if ( nuopc_tinterval /= icpfrq*nint(baclin) ) then
+      if (me==0) then
+        write(6,*)'DMI_CPL: NUOPC timestep: nuopc_tinterval = ',nuopc_tinterval
+        write(6,*)'DMI_CPL: ERROR: nuopc_tinterval /= icpfrq*baclin'
+      endif
+      call ESMF_LogWrite('DMI_CPL: ERROR: HYCOM ice timesteps do not match NUOPC timestep', &
+        ESMF_LOGMSG_ERROR, rc=rc)
+      rc = ESMF_RC_OBJ_BAD
+      return
+    endif
+
     if (me==0) print *,"DMI_CPL: HYCOM_INIT finished"
 
     ! set Component name so it becomes identifiable
@@ -621,28 +638,27 @@ module hycom_cap
     integer, intent(out) :: rc
     integer i,j
     real(8) :: xstress, ystress, pang_rev 
-    real(ESMF_KIND_R8), pointer :: dataPtr_sic(:,:),  dataPtr_sit(:,:), dataPtr_sitx(:,:), &
+    real(ESMF_KIND_R8), pointer :: dataPtr_sic(:,:),  dataPtr_sit(:,:),  dataPtr_sitx(:,:), &
                                    dataPtr_sity(:,:), dataPtr_siqs(:,:), dataPtr_sifs(:,:), &
-                                   dataPtr_sih(:,:), dataPtr_sifw(:,:), dataPtr_sifh
-    call state_getFldPtr(st, "sea_ice_fraction",dataPtr_sic,rc=rc)
+                                   dataPtr_sih(:,:),  dataPtr_sifw(:,:), dataPtr_sifh(:,:)
+    call state_getFldPtr(st,"sea_ice_fraction",dataPtr_sic,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call state_getFldPtr(st, "sea_ice_temperature",dataPtr_sit,rc=rc)  
+    call state_getFldPtr(st,"sea_ice_temperature",dataPtr_sit,rc=rc)  
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call state_getFldPtr(st, "mean_ice_volume",dataPtr_sih,rc=rc)
+    call state_getFldPtr(st,"mean_ice_volume",dataPtr_sih,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call state_getFldPtr(st, "stress_on_ocn_ice_zonal",dataPtr_sitx,rc=rc)
+    call state_getFldPtr(st,"stress_on_ocn_ice_zonal",dataPtr_sitx,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call state_getFldPtr(st, "stress_on_ocn_ice_merid",dataPtr_sity,rc=rc)
+    call state_getFldPtr(st,"stress_on_ocn_ice_merid",dataPtr_sity,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call state_getFldPtr(st, "mean_sw_pen_to_ocn",dataPtr_siqs,rc=rc)
+    call state_getFldPtr(st,"mean_sw_pen_to_ocn",dataPtr_siqs,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call state_getFldPtr(st, "mean_salt_rate",dataPtr_sifs,rc=rc)
+    call state_getFldPtr(st,"mean_salt_rate",dataPtr_sifs,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
     call state_getFldPtr(st,"mean_fresh_water_to_ocean_rate",dataPtr_sifw,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
     call state_getFldPtr(st,"net_heat_flx_to_ocn",dataPtr_sifh,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-
 
 !NOT SURE ABOUT THESE FOUR. At least siu and siv should be used.
 !        public cpl_sifh,    sifh_import   ! Ice Freezing/Melting Heat Flux
@@ -654,25 +670,19 @@ module hycom_cap
           covice(i,j) = dataPtr_sic(i,j) !Sea Ice Concentration
           si_c  (i,j) = dataPtr_sic(i,j) !Sea Ice Concentration
           if (covice(i,j).gt.0.0) then
-! THIS MOST LIKELY NEEDS SOMETHING
-            !if (frzh(i,j).gt.0.0) then
-            flxice(i,j) =  dataPtr_sifh(i,j)        !Sea Ice Heat Flux Freezing potential
-            !else
-            !flxice(i,j) =  0.d0 !sifh_import(i,j) !Sea Ice Heat Flux Melting potential
-            !endif
-!            flxice(i,j) = 0.0
+            flxice(i,j) =  dataPtr_sifh(i,j) ! Sea Ice Heat Flux Freezing potential
             xstress     = -dataPtr_sitx(i,j) ! opposite of what ice sees
             ystress     = -dataPtr_sity(i,j) ! oppostite of what ice sees
-            pang_rev    = -pang(i,j)        ! Reverse angle
+            pang_rev    = -pang(i,j)         ! Reverse angle
             si_tx (i,j) =  xstress*cos(pang_rev) - ystress*sin(pang_rev)
             si_ty (i,j) =  xstress*sin(pang_rev) + ystress*cos(pang_rev)
             fswice(i,j) =  dataPtr_siqs(i,j) !Solar Heat Flux thru Ice to Ocean already in swflx
             sflice(i,j) =  dataPtr_sifs(i,j)*1.e3 !Ice Freezing/Melting Salt Flux
             wflice(i,j) =  dataPtr_sifw(i,j) !Ice Water Flux
-            temice(i,j) =  dataPtr_sit(i,j) !Sea Ice Temperature
-            si_t  (i,j) =  dataPtr_sit(i,j) !Sea Ice Temperature
-            thkice(i,j) =  dataPtr_sih(i,j) !Sea Ice Thickness
-            si_h  (i,j) =  dataPtr_sih(i,j) !Sea Ice Thickness
+            temice(i,j) =  dataPtr_sit(i,j)  !Sea Ice Temperature
+            si_t  (i,j) =  dataPtr_sit(i,j)  !Sea Ice Temperature
+            thkice(i,j) =  dataPtr_sih(i,j)  !Sea Ice Thickness
+            si_h  (i,j) =  dataPtr_sih(i,j)  !Sea Ice Thickness
           else
             si_tx (i,j) =  0.0 !Sea Ice X-Stress into ocean
             si_ty (i,j) =  0.0 !Sea Ice Y-Stress into ocean
@@ -689,8 +699,8 @@ module hycom_cap
         enddo
       enddo
     elseif (iceflg.ge.2 .and. icmflg.eq.3) then
-      do j=13,jja
-        do i=13,ii
+      do j=1,jja
+        do i=1,ii
           si_c(i,j) = dataPtr_sic(i,j) !Sea Ice Concentration
           if (si_c(i,j).gt.0.0) then
             xstress    = -dataPtr_sitx(i,j) ! opposite of what ice sees
@@ -752,14 +762,14 @@ module hycom_cap
         do i=1,ii
           tmxl = 0.5*(temp(i,j,1,2)+temp(i,j,1,1))
           smxl = 0.5*(saln(i,j,1,2)+saln(i,j,1,1))
-          dataPtr_sst(i,j) = tmxl+273.15d0  ! construct SST [K]
-          dataPtr_sss(i,j) = smxl           ! construct SSS
+          dataPtr_sst(i,j) = tmxl ! construct SST [C]
+          dataPtr_sss(i,j) = smxl ! construct SSS
           hfrz = min( thkfrz*onem, dpbl(i,j) )
-          t2f  = (spcifh*hfrz)/(baclin*icefrq*g)
+          t2f  = (spcifh*hfrz)/(baclin*real(icefrq)*real(icpfrq)*g)
           tfrz = tfrz_0 + smxl*tfrz_s  !salinity dependent freezing point
           ssfi = (tfrz-tmxl)*t2f       !W/m^2 into ocean
-          frzh     (i,j) = max(-1000.0,min(1000.0,ssfi)) ! > 0. freezing potential of flxice
-          dataPtr_fmpot(i,j) = max(-1000.0,min(1000.0,ssfi))
+          frzh(i,j) = max(-1000.0,min(1000.0,ssfi)) ! > 0. freezing potential of flxice
+          dataPtr_fmpot(i,j) = frzh(i,j)
         enddo
       enddo
     else
@@ -877,7 +887,7 @@ module hycom_cap
 !--------- import fields to Sea Ice -------------
 ! tcraig, don't point directly into cice data YET (last field is optional in interface)
 ! instead, create space for the field when it's "realized".
-   call fld_list_add(fldsFrOcn_num,fldsFrOcn,"sea_surface_temperature"       ,"k"  ,"will provide")
+   call fld_list_add(fldsFrOcn_num,fldsFrOcn,"sea_surface_temperature"       ,"C"  ,"will provide")
    call fld_list_add(fldsFrOcn_num,fldsFrOcn,"sea_surface_salinity"          ,"1"  ,"will provide")
    call fld_list_add(fldsFrOcn_num,fldsFrOcn,"sea_surface_slope_zonal"       ,"1"  ,"will provide")
    call fld_list_add(fldsFrOcn_num,fldsFrOcn,"sea_surface_slope_merid"       ,"1"  ,"will provide")
@@ -889,7 +899,7 @@ module hycom_cap
    call fld_list_add(fldsToOcn_num,fldsToOcn,"sea_ice_fraction"              ,"1"  ,"will provide") !
    call fld_list_add(fldsToOcn_num,fldsToOcn,"stress_on_ocn_ice_zonal"       ,"1"  ,"will provide") !
    call fld_list_add(fldsToOcn_num,fldsToOCn,"stress_on_ocn_ice_merid"       ,"1"  ,"will provide") !
-   call fld_list_add(fldsToOcn_num,fldsToOcn,"sea_ice_temperature"           ,"1"  ,"will provide") !
+   call fld_list_add(fldsToOcn_num,fldsToOcn,"sea_ice_temperature"           ,"C"  ,"will provide") !
    call fld_list_add(fldsToOcn_num,fldsToOcn,"mean_sw_pen_to_ocn"            ,"1"  ,"will provide") !
    call fld_list_add(fldsToOcn_num,fldsToOcn,"mean_fresh_water_to_ocean_rate","1"  ,"will provide")!
    call fld_list_add(fldsToOcn_num,fldsToOcn,"mean_salt_rate"                ,"1"  ,"will provide") !
