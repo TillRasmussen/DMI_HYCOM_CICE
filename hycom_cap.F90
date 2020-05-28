@@ -656,7 +656,7 @@ module hycom_cap
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
     call state_getFldPtr(st, "mean_salt_rate",dataPtr_sifs,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call state_getFldPtr(st,"mean_fresh_water_to_ocean_rate",dataPtr_sifw,rc=rc)
+    call state_getFldPtr(st, "mean_fresh_water_to_ocean_rate",dataPtr_sifw,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
 
 !NOT SURE ABOUT THESE FOUR. At least siu and siv should be used.
@@ -704,8 +704,8 @@ module hycom_cap
         enddo
       enddo
     elseif (iceflg.ge.2 .and. icmflg.eq.3) then
-      do j=13,jja
-        do i=13,ii
+      do j=1,jja
+        do i=1,ii
           si_c(i,j) = dataPtr_sic(i,j) !Sea Ice Concentration
           if (si_c(i,j).gt.0.0) then
             xstress    = -dataPtr_sitx(i,j) ! opposite of what ice sees
@@ -767,8 +767,8 @@ module hycom_cap
         do i=1,ii
           tmxl = 0.5*(temp(i,j,1,2)+temp(i,j,1,1))
           smxl = 0.5*(saln(i,j,1,2)+saln(i,j,1,1))
-          dataPtr_sst(i,j) = tmxl+273.15d0  ! construct SST [K]
-          dataPtr_sss(i,j) = smxl           ! construct SSS
+          dataPtr_sst(i,j) = tmxl      ! construct SST [C]
+          dataPtr_sss(i,j) = smxl      ! construct SSS
           hfrz = min( thkfrz*onem, dpbl(i,j) )
 !MHRI          t2f  = (spcifh*hfrz)/(baclin*icefrq*g)
           t2f  = (spcifh*hfrz)/(baclin*real(icefrq)*real(icpfrq)*g)  ! icefrq,icpfrq integers
@@ -781,7 +781,7 @@ module hycom_cap
     else
       frzh(:,:)          = 0.
       dataPtr_fmpot(:,:) = 0.
-      dataPtr_sst(:,:)   = 0.+273.15d0  ! construct SST [K]
+      dataPtr_sst(:,:)   = 0.
       dataPtr_sss(:,:)   = 0.
     endif
 
@@ -893,7 +893,7 @@ module hycom_cap
 !--------- import fields to Sea Ice -------------
 ! tcraig, don't point directly into cice data YET (last field is optional in interface)
 ! instead, create space for the field when it's "realized".
-   call fld_list_add(fldsFrOcn_num,fldsFrOcn,"sea_surface_temperature"       ,"k"  ,"will provide")
+   call fld_list_add(fldsFrOcn_num,fldsFrOcn,"sea_surface_temperature"       ,"C"  ,"will provide")
    call fld_list_add(fldsFrOcn_num,fldsFrOcn,"sea_surface_salinity"          ,"1"  ,"will provide")
    call fld_list_add(fldsFrOcn_num,fldsFrOcn,"sea_surface_slope_zonal"       ,"1"  ,"will provide")
    call fld_list_add(fldsFrOcn_num,fldsFrOcn,"sea_surface_slope_merid"       ,"1"  ,"will provide")
@@ -905,7 +905,7 @@ module hycom_cap
    call fld_list_add(fldsToOcn_num,fldsToOcn,"sea_ice_fraction"              ,"1"  ,"will provide") !
    call fld_list_add(fldsToOcn_num,fldsToOcn,"stress_on_ocn_ice_zonal"       ,"1"  ,"will provide") !
    call fld_list_add(fldsToOcn_num,fldsToOCn,"stress_on_ocn_ice_merid"       ,"1"  ,"will provide") !
-   call fld_list_add(fldsToOcn_num,fldsToOcn,"sea_ice_temperature"           ,"1"  ,"will provide") !
+   call fld_list_add(fldsToOcn_num,fldsToOcn,"sea_ice_temperature"           ,"C"  ,"will provide") !
    call fld_list_add(fldsToOcn_num,fldsToOcn,"mean_sw_pen_to_ocn"            ,"1"  ,"will provide") !
    call fld_list_add(fldsToOcn_num,fldsToOcn,"mean_fresh_water_to_ocean_rate","1"  ,"will provide")!
    call fld_list_add(fldsToOcn_num,fldsToOcn,"mean_salt_rate"                ,"1"  ,"will provide") !
