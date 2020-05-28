@@ -202,12 +202,11 @@ module hycom_cap
 
     call ESMF_LOGWRITE("AFTER HYCOM_INIT", ESMF_LOGMSG_INFO, rc=rc)
 
-    !-- HYCOM timesteps + HYCOM steps between ice steps
+    !-- Check HYCOM timesteps + HYCOM steps between ice steps
     if (me==0) then
       write(6,*)'DMI_CPL: HYCOM timestep: baclin = ',baclin
       write(6,*)'DMI_CPL: HYCOM timesteps between ice update: icpfrq = ',icpfrq
     endif
-    !-- Check timesteps
     if ( nuopc_tinterval /= icpfrq*nint(baclin) ) then
       if (me==0) then
         write(6,*)'DMI_CPL: NUOPC timestep: nuopc_tinterval = ',nuopc_tinterval
@@ -641,22 +640,24 @@ module hycom_cap
     real(8) :: xstress, ystress, pang_rev 
     real(ESMF_KIND_R8), pointer :: dataPtr_sic(:,:),  dataPtr_sit(:,:), dataPtr_sitx(:,:), &
                                    dataPtr_sity(:,:), dataPtr_siqs(:,:), dataPtr_sifs(:,:), &
-                                   dataPtr_sih(:,:), dataPtr_sifw(:,:)
-    call state_getFldPtr(st, "sea_ice_fraction",dataPtr_sic,rc=rc)
+                                   dataPtr_sih(:,:), dataPtr_sifw(:,:), dataPtr_sifh
+    call state_getFldPtr(st,"sea_ice_fraction",dataPtr_sic,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call state_getFldPtr(st, "sea_ice_temperature",dataPtr_sit,rc=rc)  
+    call state_getFldPtr(st,"sea_ice_temperature",dataPtr_sit,rc=rc)  
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call state_getFldPtr(st, "mean_ice_volume",dataPtr_sih,rc=rc)
+    call state_getFldPtr(st,"mean_ice_volume",dataPtr_sih,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call state_getFldPtr(st, "stress_on_ocn_ice_zonal",dataPtr_sitx,rc=rc)
+    call state_getFldPtr(st,"stress_on_ocn_ice_zonal",dataPtr_sitx,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call state_getFldPtr(st, "stress_on_ocn_ice_merid",dataPtr_sity,rc=rc)
+    call state_getFldPtr(st,"stress_on_ocn_ice_merid",dataPtr_sity,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call state_getFldPtr(st, "mean_sw_pen_to_ocn",dataPtr_siqs,rc=rc)
+    call state_getFldPtr(st,"mean_sw_pen_to_ocn",dataPtr_siqs,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call state_getFldPtr(st, "mean_salt_rate",dataPtr_sifs,rc=rc)
+    call state_getFldPtr(st,"mean_salt_rate",dataPtr_sifs,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call state_getFldPtr(st, "mean_fresh_water_to_ocean_rate",dataPtr_sifw,rc=rc)
+    call state_getFldPtr(st,"mean_fresh_water_to_ocean_rate",dataPtr_sifw,rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+    call state_getFldPtr(st,"net_heat_flx_to_ocn",dataPtr_sifh,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
 
 !NOT SURE ABOUT THESE FOUR. At least siu and siv should be used.
@@ -669,13 +670,7 @@ module hycom_cap
           covice(i,j) = dataPtr_sic(i,j) !Sea Ice Concentration
           si_c  (i,j) = dataPtr_sic(i,j) !Sea Ice Concentration
           if (covice(i,j).gt.0.0) then
-! THIS MOST LIKELY NEEDS SOMETHING
-            !if (frzh(i,j).gt.0.0) then
-            !flxice(i,j) = frzh(i,j)         !Sea Ice Heat Flux Freezing potential
-            !else
-            flxice(i,j) =  0.d0 !sifh_import(i,j) !Sea Ice Heat Flux Melting potential
-            !endif
-!            flxice(i,j) = 0.0
+            flxice(i,j) = dataPtr_sifh(i,j)  !Sea Ice Heat Flux Freezing potential
             xstress     = -dataPtr_sitx(i,j) ! opposite of what ice sees
             ystress     = -dataPtr_sity(i,j) ! oppostite of what ice sees
             pang_rev    = -pang(i,j)         ! Reverse angle
@@ -713,7 +708,7 @@ module hycom_cap
             pang_rev   = -pang(i,j)         ! Reverse Angle
             si_tx(i,j) =  xstress*cos(pang_rev) - ystress*sin(pang_rev)
             si_ty(i,j) =  xstress*sin(pang_rev) + ystress*cos(pang_rev)
-            si_h (i,j) =  dataptr_sih(i,j) !Sea Ice Thickness
+            si_h (i,j) =  dataPtr_sih(i,j) !Sea Ice Thickness
             si_t (i,j) =  dataPtr_sit(i,j) !Sea Ice Temperature
           else
             si_tx(i,j) = 0.0
@@ -767,8 +762,8 @@ module hycom_cap
         do i=1,ii
           tmxl = 0.5*(temp(i,j,1,2)+temp(i,j,1,1))
           smxl = 0.5*(saln(i,j,1,2)+saln(i,j,1,1))
-          dataPtr_sst(i,j) = tmxl      ! construct SST [C]
-          dataPtr_sss(i,j) = smxl      ! construct SSS
+          dataPtr_sst(i,j) = tmxl ! construct SST [C]
+          dataPtr_sss(i,j) = smxl ! construct SSS
           hfrz = min( thkfrz*onem, dpbl(i,j) )
 !MHRI          t2f  = (spcifh*hfrz)/(baclin*icefrq*g)
           t2f  = (spcifh*hfrz)/(baclin*real(icefrq)*real(icpfrq)*g)  ! icefrq,icpfrq integers
@@ -850,7 +845,7 @@ module hycom_cap
    call ESMF_VMGetGlobal(vm=vm, rc=rc)
    call ESMF_VMGet (vm, localPet=me, petCount=npes)
    rc = ESMF_SUCCESS
- 
+
    !nfields = size(fieldList) This should be input
    if (me==0) write(6,*)'DMI_CPL: Number of HYCOM fields = ',nfields
    do i = 1, nfields
