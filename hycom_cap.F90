@@ -638,9 +638,9 @@ module hycom_cap
     integer, intent(out) :: rc
     integer i,j
     real(8) :: xstress, ystress, pang_rev 
-    real(ESMF_KIND_R8), pointer :: dataPtr_sic(:,:),  dataPtr_sit(:,:), dataPtr_sitx(:,:), &
+    real(ESMF_KIND_R8), pointer :: dataPtr_sic(:,:),  dataPtr_sit(:,:),  dataPtr_sitx(:,:), &
                                    dataPtr_sity(:,:), dataPtr_siqs(:,:), dataPtr_sifs(:,:), &
-                                   dataPtr_sih(:,:), dataPtr_sifw(:,:), dataPtr_sifh
+                                   dataPtr_sih(:,:),  dataPtr_sifw(:,:), dataPtr_sifh(:,:)
     call state_getFldPtr(st,"sea_ice_fraction",dataPtr_sic,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
     call state_getFldPtr(st,"sea_ice_temperature",dataPtr_sit,rc=rc)  
