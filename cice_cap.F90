@@ -291,7 +291,7 @@ module cice_cap
     if (peIDCount /= ice_petCount) then
       if (me==0) then
         write(6,*)'DMI_CPL: ERROR: Required CICE peIDCount not equal to requested ice_petCount'
-        write(6,*)'DMI_CPL: TIP:     Adjust ice_petCount in nuopc_nml file'
+        write(6,*)'DMI_CPL: Hint:     Adjust ice_petCount in nuopc_nml file'
       endif
       call ESMF_LogWrite('DMI_CPL: ERROR: Required CICE peIDCount not equal to requested ice_petCount:', &
         ESMF_LOGMSG_ERROR, rc=rc)
@@ -302,7 +302,7 @@ module cice_cap
       if (me==0) then
         write(6,*)'DMI_CPL: ERROR: Required CICE peIDCount not equal to CICE allocated nblocks_tot.'
         write(6,*)'DMI_CPL:          It is required for coupled runs.'
-        write(6,*)'DMI_CPL: TIP: Adjust block_size_{x,y}, processor_shape and/or distribution_type in ice_in file.'
+        write(6,*)'DMI_CPL: Hint: Adjust block_size_{x,y}, processor_shape and/or distribution_type in ice_in file.'
       endif
       call ESMF_LogWrite('DMI_CPL: ERROR: Required CICE peIDCount not equal to CICE allocated nblocks_tot', &
         ESMF_LOGMSG_ERROR, rc=rc)
