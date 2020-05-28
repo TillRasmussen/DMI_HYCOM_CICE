@@ -670,7 +670,7 @@ module hycom_cap
           covice(i,j) = dataPtr_sic(i,j) !Sea Ice Concentration
           si_c  (i,j) = dataPtr_sic(i,j) !Sea Ice Concentration
           if (covice(i,j).gt.0.0) then
-            flxice(i,j) = dataPtr_sifh(i,j)  !Sea Ice Heat Flux Freezing potential
+            flxice(i,j) =  dataPtr_sifh(i,j) ! Sea Ice Heat Flux Freezing potential
             xstress     = -dataPtr_sitx(i,j) ! opposite of what ice sees
             ystress     = -dataPtr_sity(i,j) ! oppostite of what ice sees
             pang_rev    = -pang(i,j)         ! Reverse angle
