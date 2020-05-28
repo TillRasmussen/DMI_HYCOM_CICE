@@ -960,19 +960,19 @@ module cice_cap
     type(ESMF_State)     :: st
     logical              :: initflag
     integer, intent(out) :: rc
-    real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sst(:,:,:)
-    real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sss(:,:,:)
-    real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sssz(:,:,:)
-    real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sssm(:,:,:)
-    real(kind=ESMF_KIND_R8), pointer  :: dataPtr_ocncz(:,:,:)
-    real(kind=ESMF_KIND_R8), pointer  :: dataPtr_ocncm(:,:,:)
-    real(kind=ESMF_KIND_R8), pointer  :: dataPtr_fmpot(:,:,:)
-    real(kind=ESMF_KIND_R8), pointer  :: dataPtr_mld(:,:,:)
-    integer                           :: ilo,ihi,jlo,jhi 
-    integer                           :: i,j,iblk,n,i1,i2,j1,j2
-    real(kind=ESMF_KIND_R8)           :: ue, vn, AngT_s 
-    type(block)                            :: this_block
-     character(len=*),parameter  :: subname='(cice_cap:CICE_Import)'
+    real(kind=ESMF_KIND_R8),pointer :: dataPtr_sst(:,:,:)
+    real(kind=ESMF_KIND_R8),pointer :: dataPtr_sss(:,:,:)
+    real(kind=ESMF_KIND_R8),pointer :: dataPtr_sssz(:,:,:)
+    real(kind=ESMF_KIND_R8),pointer :: dataPtr_sssm(:,:,:)
+    real(kind=ESMF_KIND_R8),pointer :: dataPtr_ocncz(:,:,:)
+    real(kind=ESMF_KIND_R8),pointer :: dataPtr_ocncm(:,:,:)
+    real(kind=ESMF_KIND_R8),pointer :: dataPtr_fmpot(:,:,:)
+    real(kind=ESMF_KIND_R8),pointer :: dataPtr_mld(:,:,:)
+    integer                    :: ilo,ihi,jlo,jhi 
+    integer                    :: i,j,iblk,n,i1,i2,j1,j2
+    real(kind=ESMF_KIND_R8)    :: ue, vn, AngT_s 
+    type(block)                :: this_block
+    character(len=*),parameter :: subname='(cice_cap:CICE_Import)'
 
     call State_getFldPtr(st,'sea_surface_temperature',dataPtr_sst,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
@@ -1000,10 +1000,9 @@ module cice_cap
        do i = ilo,ihi
           i1 = i - ilo + 1
           j1 = j - jlo + 1
-          sss    (i,j,iblk) = dataPtr_sss    (i1,j1,iblk)  ! sea surface salinity (maybe for mushy layer)
-          sst    (i,j,iblk) = dataPtr_sst    (i1,j1,iblk)  ! sea surface temp [C] (may not be needed?)
-
-          frzmlt (i,j,iblk) = dataPtr_fmpot  (i1,j1,iblk)
+          sss    (i,j,iblk) = dataPtr_sss  (i1,j1,iblk)  ! sea surface salinity (maybe for mushy layer)
+          sst    (i,j,iblk) = dataPtr_sst  (i1,j1,iblk)  ! sea surface temp [C] (may not be needed?)
+          frzmlt (i,j,iblk) = dataPtr_fmpot(i1,j1,iblk)
           ue = dataPtr_ocncz  (i1,j1,iblk)
           vn = dataPtr_ocncm  (i1,j1,iblk)
           AngT_s = ANGLET(i,j,iblk)
