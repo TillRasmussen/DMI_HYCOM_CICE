@@ -765,12 +765,11 @@ module hycom_cap
           dataPtr_sst(i,j) = tmxl ! construct SST [C]
           dataPtr_sss(i,j) = smxl ! construct SSS
           hfrz = min( thkfrz*onem, dpbl(i,j) )
-!MHRI          t2f  = (spcifh*hfrz)/(baclin*icefrq*g)
-          t2f  = (spcifh*hfrz)/(baclin*real(icefrq)*real(icpfrq)*g)  ! icefrq,icpfrq integers
+          t2f  = (spcifh*hfrz)/(baclin*real(icefrq)*real(icpfrq)*g)
           tfrz = tfrz_0 + smxl*tfrz_s  !salinity dependent freezing point
           ssfi = (tfrz-tmxl)*t2f       !W/m^2 into ocean
-          frzh(i,j)          = max(-1000.0,min(1000.0,ssfi)) ! > 0. freezing potential of flxice
-          dataPtr_fmpot(i,j) = max(-1000.0,min(1000.0,ssfi))
+          frzh(i,j) = max(-1000.0,min(1000.0,ssfi)) ! > 0. freezing potential of flxice
+          dataPtr_fmpot(i,j) = frzh(i,j)
         enddo
       enddo
     else
