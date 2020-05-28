@@ -14,7 +14,7 @@ module cice_cap
   use ice_domain_size, only: max_blocks, nx_global, ny_global
   use ice_domain, only: nblocks, blocks_ice, distrb_info
   use ice_distribution, only: ice_distributiongetblockloc
-  use icepack_parameters, only: Tffresh, rad_to_deg
+  use icepack_parameters, only: rad_to_deg
   use ice_calendar,  only: dt
   use ice_flux
   use ice_grid, only: TLAT, TLON, ULAT, ULON, hm, tarea, ANGLET, ANGLE, &
@@ -26,7 +26,7 @@ module cice_cap
 !end cice specific
   use ESMF
   use NUOPC
-  use mod_nuopc_options, only: esmf_write_diagnostics, ice_petCount, profile_memory
+  use mod_nuopc_options, only: esmf_write_diagnostics, ice_petCount, profile_memory, nuopc_tinterval
   use NUOPC_Model, &
     model_routine_SS      => SetServices, &
     model_label_SetClock  => label_SetClock, &
@@ -153,6 +153,19 @@ module cice_cap
     call CICE_FieldsSetup()
     call CICE_Initialize(mpi_comm)
 
+    !-- Check CICE timestep
+    if (me==0) write(6,*)'DMI_CPL: CICE timestep: dt = ',dt
+    if ( nuopc_tinterval /= nint(dt) ) then
+      if (me==0) then
+        write(6,*)'DMI_CPL: NUOPC timestep: nuopc_tinterval = ',nuopc_tinterval
+        write(6,*)'DMI_CPL: ERROR: nuopc_tinterval /= dt'
+      endif
+      call ESMF_LogWrite('DMI_CPL: ERROR: CICE timestep do not match NUOPC timestep', &
+        ESMF_LOGMSG_ERROR, rc=rc)
+      rc = ESMF_RC_OBJ_BAD
+      return
+    endif
+
     call CICE_AdvertiseFields(importState, fldsToIce_num, fldsToIce, me,rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
@@ -278,7 +291,7 @@ module cice_cap
     if (peIDCount /= ice_petCount) then
       if (me==0) then
         write(6,*)'DMI_CPL: ERROR: Required CICE peIDCount not equal to requested ice_petCount'
-        write(6,*)'DMI_CPL: HINT:     Adjust ice_petCount in nuopc_nml file'
+        write(6,*)'DMI_CPL: TIP:     Adjust ice_petCount in nuopc_nml file'
       endif
       call ESMF_LogWrite('DMI_CPL: ERROR: Required CICE peIDCount not equal to requested ice_petCount:', &
         ESMF_LOGMSG_ERROR, rc=rc)
@@ -876,7 +889,7 @@ module cice_cap
 ! instead, create space for the field when it's "realized".
 !TODO REMOVE FIELDS NOT USED TAR
 ! WILL PROVIDE means that field has its own grid. Can be changed to accept grid from outside
-    call fld_list_add(fldsToIce_num, fldsToIce, "sea_surface_temperature"         ,"K"   , "will provide")
+    call fld_list_add(fldsToIce_num, fldsToIce, "sea_surface_temperature"         ,"C"   , "will provide")
     call fld_list_add(fldsToIce_num, fldsToIce, "sea_surface_salinity"            ,"1"   , "will provide")
     call fld_list_add(fldsToIce_num, fldsToIce, "sea_surface_slope_zonal"         ,"1"   , "will provide")
     call fld_list_add(fldsToIce_num, fldsToIce, "sea_surface_slope_merid"         ,"1"   , "will provide")
@@ -888,10 +901,10 @@ module cice_cap
     call fld_list_add(fldsFrIce_num, fldsFrIce, "sea_ice_fraction"                ,"1"   , "will provide") 
     call fld_list_add(fldsFrIce_num, fldsFrIce, "stress_on_ocn_ice_zonal"         ,"1"   , "will provide") 
     call fld_list_add(fldsFrIce_num, fldsFrIce, "stress_on_ocn_ice_merid"         ,"1"   , "will provide") 
-    call fld_list_add(fldsFrIce_num, fldsFrIce, "sea_ice_temperature"             ,"1"   , "will provide") 
+    call fld_list_add(fldsFrIce_num, fldsFrIce, "sea_ice_temperature"             ,"C"   , "will provide") 
 !    call fld_list_add(fldsFrIce_num, fldsFrIce, "ice_mask"                        ,"1"   , "will provide")
     call fld_list_add(fldsFrIce_num, fldsFrIce, "mean_sw_pen_to_ocn"              ,"1"   , "will provide") 
-    call fld_list_add(fldsFrIce_num, fldsFrIce, "mean_fresh_water_to_ocean_rate" ,"1"   ,  "will provide")
+    call fld_list_add(fldsFrIce_num, fldsFrIce, "mean_fresh_water_to_ocean_rate"  ,"1"   , "will provide")
     call fld_list_add(fldsFrIce_num, fldsFrIce, "mean_salt_rate"                  ,"1"   , "will provide") 
     call fld_list_add(fldsFrIce_num, fldsFrIce, "net_heat_flx_to_ocn"             ,"1"   , "will provide") 
     call fld_list_add(fldsFrIce_num, fldsFrIce, "mean_ice_volume"                 ,"1"   , "will provide")
@@ -947,19 +960,19 @@ module cice_cap
     type(ESMF_State)     :: st
     logical              :: initflag
     integer, intent(out) :: rc
-    real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sst(:,:,:)
-    real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sss(:,:,:)
-    real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sssz(:,:,:)
-    real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sssm(:,:,:)
-    real(kind=ESMF_KIND_R8), pointer  :: dataPtr_ocncz(:,:,:)
-    real(kind=ESMF_KIND_R8), pointer  :: dataPtr_ocncm(:,:,:)
-    real(kind=ESMF_KIND_R8), pointer  :: dataPtr_fmpot(:,:,:)
-    real(kind=ESMF_KIND_R8), pointer  :: dataPtr_mld(:,:,:)
-    integer                           :: ilo,ihi,jlo,jhi 
-    integer                           :: i,j,iblk,n,i1,i2,j1,j2
-    real(kind=ESMF_KIND_R8)           :: ue, vn, AngT_s 
-    type(block)                            :: this_block
-     character(len=*),parameter  :: subname='(cice_cap:CICE_Import)'
+    real(kind=ESMF_KIND_R8),pointer :: dataPtr_sst(:,:,:)
+    real(kind=ESMF_KIND_R8),pointer :: dataPtr_sss(:,:,:)
+    real(kind=ESMF_KIND_R8),pointer :: dataPtr_sssz(:,:,:)
+    real(kind=ESMF_KIND_R8),pointer :: dataPtr_sssm(:,:,:)
+    real(kind=ESMF_KIND_R8),pointer :: dataPtr_ocncz(:,:,:)
+    real(kind=ESMF_KIND_R8),pointer :: dataPtr_ocncm(:,:,:)
+    real(kind=ESMF_KIND_R8),pointer :: dataPtr_fmpot(:,:,:)
+    real(kind=ESMF_KIND_R8),pointer :: dataPtr_mld(:,:,:)
+    integer                    :: ilo,ihi,jlo,jhi 
+    integer                    :: i,j,iblk,n,i1,i2,j1,j2
+    real(kind=ESMF_KIND_R8)    :: ue, vn, AngT_s 
+    type(block)                :: this_block
+    character(len=*),parameter :: subname='(cice_cap:CICE_Import)'
 
     call State_getFldPtr(st,'sea_surface_temperature',dataPtr_sst,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
@@ -987,10 +1000,9 @@ module cice_cap
        do i = ilo,ihi
           i1 = i - ilo + 1
           j1 = j - jlo + 1
-          sss    (i,j,iblk) = dataPtr_sss    (i1,j1,iblk)  ! sea surface salinity (maybe for mushy layer)
-          sst    (i,j,iblk) = dataPtr_sst    (i1,j1,iblk) - Tffresh  ! sea surface temp (may not be needed?)
-
-          frzmlt (i,j,iblk) = dataPtr_fmpot  (i1,j1,iblk)
+          sss    (i,j,iblk) = dataPtr_sss  (i1,j1,iblk)  ! sea surface salinity (maybe for mushy layer)
+          sst    (i,j,iblk) = dataPtr_sst  (i1,j1,iblk)  ! sea surface temp [C] (may not be needed?)
+          frzmlt (i,j,iblk) = dataPtr_fmpot(i1,j1,iblk)
           ue = dataPtr_ocncz  (i1,j1,iblk)
           vn = dataPtr_ocncm  (i1,j1,iblk)
           AngT_s = ANGLET(i,j,iblk)
@@ -1071,12 +1083,12 @@ module cice_cap
         do i = ilo,ihi
           i1 = i - ilo + 1
           j1 = j - jlo + 1
-          dataPtr_ifrac   (i1,j1,iblk) = aice(i,j,iblk)   ! ice fraction (0-1)
-          dataPtr_fhocn    (i1,j1,iblk) = fhocn(i,j,iblk)   ! heat exchange with ocean
-          dataPtr_fresh    (i1,j1,iblk) = fresh(i,j,iblk)   ! fresh water to ocean
-          dataPtr_fsalt    (i1,j1,iblk) = fsalt(i,j,iblk)   ! salt to ocean
-          dataPtr_vice    (i1,j1,iblk) = vice(i,j,iblk)   ! sea ice volume
-          dataPtr_vsno    (i1,j1,iblk) = vsno(i,j,iblk)   ! snow volume
+          dataPtr_ifrac   (i1,j1,iblk) = aice(i,j,iblk)    ! ice fraction (0-1)
+          dataPtr_fhocn   (i1,j1,iblk) = fhocn(i,j,iblk)   ! heat exchange with ocean
+          dataPtr_fresh   (i1,j1,iblk) = fresh(i,j,iblk)   ! fresh water to ocean
+          dataPtr_fsalt   (i1,j1,iblk) = fsalt(i,j,iblk)   ! salt to ocean
+          dataPtr_vice    (i1,j1,iblk) = vice(i,j,iblk)    ! sea ice volume
+          dataPtr_vsno    (i1,j1,iblk) = vsno(i,j,iblk)    ! snow volume
           dataPtr_fswthru (i1,j1,iblk) = fswthru(i,j,iblk) ! short wave penetration through ice
           ui = strocnxT(i,j,iblk)
           vj = strocnyT(i,j,iblk)
