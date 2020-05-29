@@ -637,7 +637,7 @@ module hycom_cap
     logical              :: initFlag
     integer, intent(out) :: rc
     integer i,j
-    real(8) :: xstress, ystress, pang_rev 
+    real(8) :: xstress, ystress, pang_rev
     real(ESMF_KIND_R8), pointer :: dataPtr_sic(:,:),  dataPtr_sit(:,:),  dataPtr_sitx(:,:), &
                                    dataPtr_sity(:,:), dataPtr_siqs(:,:), dataPtr_sifs(:,:), &
                                    dataPtr_sih(:,:),  dataPtr_sifw(:,:), dataPtr_sifh(:,:)
@@ -670,7 +670,14 @@ module hycom_cap
           covice(i,j) = dataPtr_sic(i,j) !Sea Ice Concentration
           si_c  (i,j) = dataPtr_sic(i,j) !Sea Ice Concentration
           if (covice(i,j).gt.0.0) then
-            flxice(i,j) =  dataPtr_sifh(i,j) ! Sea Ice Heat Flux Freezing potential
+            if (frzh(i,j)>0.0) then
+              ! --- add energy to move tmxl towards tfrz (only if tmxl < tfrz)
+              ! --- include some dependance on sea ice coverage
+!              flxice(i,j) = max( dataPtr_sifh(i,j), frzh(i,j)*max(covice(i,j),0.1) )
+              flxice(i,j) = frzh(i,j)*covice(i,j)
+            else
+              flxice(i,j) = dataPtr_sifh(i,j) ! Sea Ice Heat Flux Freezing potential
+            endif
             xstress     = -dataPtr_sitx(i,j) ! opposite of what ice sees
             ystress     = -dataPtr_sity(i,j) ! oppostite of what ice sees
             pang_rev    = -pang(i,j)         ! Reverse angle
@@ -765,11 +772,11 @@ module hycom_cap
           dataPtr_sst(i,j) = tmxl ! construct SST [C]
           dataPtr_sss(i,j) = smxl ! construct SSS
           hfrz = min( thkfrz*onem, dpbl(i,j) )
-          t2f  = (spcifh*hfrz)/(baclin*real(icefrq)*real(icpfrq)*g)
+          t2f  = (spcifh*hfrz)/(baclin*dble(icefrq)*dble(icpfrq)*g)
           tfrz = tfrz_0 + smxl*tfrz_s  !salinity dependent freezing point
           ssfi = (tfrz-tmxl)*t2f       !W/m^2 into ocean
-          frzh(i,j) = max(-1000.0,min(1000.0,ssfi)) ! > 0. freezing potential of flxice
-          dataPtr_fmpot(i,j) = frzh(i,j)
+          dataPtr_fmpot(i,j) = max(-1000.0,min(1000.0,ssfi)) ! > 0. freezing potential of flxice
+          frzh(i,j)=dataPtr_fmpot(i,j)
         enddo
       enddo
     else
