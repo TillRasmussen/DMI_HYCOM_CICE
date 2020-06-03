@@ -11,7 +11,8 @@ module cice_cap
 ! cice specific
   use ice_blocks, only: nx_block, ny_block, nblocks_tot, block, get_block, &
                         get_block_parameter
-  use ice_domain_size, only: max_blocks, nx_global, ny_global
+  use ice_domain_size, only: max_blocks, nx_global, ny_global, nilyr
+  use icepack_tracers, only: nt_sice
   use ice_domain, only: nblocks, blocks_ice, distrb_info
   use ice_distribution, only: ice_distributiongetblockloc
   use icepack_parameters, only: rad_to_deg
@@ -310,6 +311,15 @@ module cice_cap
       return
     endif
     if (me==0) write(6,*)'DMI_CPL: peIDCount equals requested ice_petCount: OK'
+
+    !- Use ice salinity for Tmlt calculation?
+    if (me==0) then
+      if (nt_sice<1) then
+        write(6,*)'DMI_CPL: No CICE salinity (sice): Assume Tmlt=sice=0.0'
+      else
+        write(6,*)'DMI_CPL: CICE salinity (sice) used for Tmlt calculation'
+      endif
+    endif
 
 !tarnotglobal    allocate(connectionList(2))
     ! bipolar boundary condition at top row: nyg
@@ -909,6 +919,7 @@ module cice_cap
     call fld_list_add(fldsFrIce_num, fldsFrIce, "net_heat_flx_to_ocn"             ,"1"   , "will provide") 
     call fld_list_add(fldsFrIce_num, fldsFrIce, "mean_ice_volume"                 ,"1"   , "will provide")
     call fld_list_add(fldsFrIce_num, fldsFrIce, "mean_snow_volume"                ,"1"   , "will provide")
+    call fld_list_add(fldsFrIce_num, fldsFrIce, "ice_salinity"                    ,"1"   , "will provide")
 
   end subroutine CICE_FieldsSetup
 
@@ -1036,12 +1047,13 @@ module cice_cap
     real(ESMF_KIND_R8), pointer :: dataPtr_vice(:,:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_vsno(:,:,:)
     real(ESMF_KIND_R8), pointer :: dataPtr_fswthru(:,:,:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_sice(:,:,:)
 
-    integer                           :: ilo,ihi,jlo,jhi
-    integer                           :: i,j,iblk,n,i1,i2,j1,j2
-    real(kind=ESMF_KIND_R8)           :: ui, vj, angT
+    integer                     :: ilo,ihi,jlo,jhi
+    integer                     :: i,j,iblk,n,i1,i2,j1,j2, k
+    real(kind=ESMF_KIND_R8)     :: ui, vj, angT, sice
     
-    type(block)                            :: this_block
+    type(block)                 :: this_block
     character(len=*),parameter  :: subname='(cice_cap:CICE_Export)'
 !TODO clean up fields
     call State_getFldPtr(st,'sea_ice_fraction',dataPtr_ifrac,rc=rc)
@@ -1064,6 +1076,8 @@ module cice_cap
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
     call State_getFldPtr(st,'mean_sw_pen_to_ocn',dataPtr_fswthru,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+    call State_getFldPtr(st,'ice_salinity',dataPtr_sice,rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
 
     write(info, *) subname//' ifrac size :', &
     lbound(dataPtr_ifrac,1), ubound(dataPtr_ifrac,1), &
@@ -1072,6 +1086,7 @@ module cice_cap
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
     dataPtr_ifrac = 0._ESMF_KIND_R8
     dataPtr_itemp = 0._ESMF_KIND_R8
+    dataPtr_sice  = 0._ESMF_KIND_R8
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
     do iblk = 1,nblocks
       this_block = get_block(blocks_ice(iblk),iblk)
@@ -1095,6 +1110,20 @@ module cice_cap
           angT = ANGLET(i,j,iblk)
           dataPtr_strocnxT(i1,j1,iblk) =  ui*cos(-angT) + vj*sin(angT)  ! ice ocean stress
           dataPtr_strocnyT(i1,j1,iblk) = -ui*sin(angT)  + vj*cos(-angT)  ! ice ocean stress
+          !-- sice (ice_history.F90)
+          if (nt_sice<1) then
+            sice = 0._ESMF_KIND_R8
+          else
+            ! Mean ice Salinity
+            sice = 0._ESMF_KIND_R8
+            do k = 1, nilyr
+              sice = sice + trcr(i,j,nt_sice+k-1,iblk)
+            enddo
+            sice = sice / dble(nilyr)
+            ! Salinity in BOTTOM layer (in contact with ocean!)
+!            sice=trcr(i,j,nt_sice+nilyr-1,iblk)
+          endif
+          dataPtr_sice(i1,j1,iblk) = sice  ! ice salinity
         enddo
       enddo
     enddo
