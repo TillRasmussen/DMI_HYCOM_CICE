@@ -34,12 +34,12 @@
         public pang           ! ANGLET
         public dhde           ! eastward ssh slope
         public dhdn           ! northward ssh slope
-        public uml           ! eastward u velocity
-        public vml           ! northward v velocity
-        public tml           ! export T average over one coupling sequence
-        public sml           ! export S average over one coupling sequence
+        public uml            ! eastward u velocity
+        public vml            ! northward v velocity
+        public tml            ! export T average over one coupling sequence
+        public sml            ! export S average over one coupling sequence
         public sshm           ! export SSH average over one coupling sequence
-        !public frzh           ! export of freezing and melting potential 
+        public frzh           ! export of freezing and melting potential 
         
         ! native imports
         public covice         ! ice coverage (rel.units)
@@ -63,7 +63,7 @@
         
         ! scalars and flags
         public g, onem, qonem, thkfrz, baclin, spcifh, pcp_fact
-        public tfrz_0, tfrz_s, frzh
+        public tfrz_0, tfrz_s
         public iceflg, icmflg, sstflg,itest,jtest,ltripolar
         
       end module

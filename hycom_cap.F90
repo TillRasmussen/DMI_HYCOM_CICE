@@ -8,6 +8,7 @@ module hycom_cap
     end_of_run, end_of_run_cpl
 
   use mod_hycom_nuopc_glue
+  use mod_dimensions, only : idm,jdm,nbdy
   use mod_cb_arrays_nuopc_glue
   use mod_nuopc_options, only: esmf_write_diagnostics, nuopc_restart, profile_memory, nuopc_tinterval
   use ESMF
@@ -45,13 +46,15 @@ module hycom_cap
     real(ESMF_KIND_R8), dimension(:,:,:), pointer :: farrayPtr
   end type fld_list_type
 
-  integer,parameter :: fldsMax = 50
-  integer :: fldsToOcn_num = 0
+  integer,parameter    :: fldsMax = 50
+  integer              :: fldsToOcn_num = 0
   type (fld_list_type) :: fldsToOcn(fldsMax)
-  integer :: fldsFrOcn_num = 0
+  integer              :: fldsFrOcn_num = 0
   type (fld_list_type) :: fldsFrOcn(fldsMax)
-  character(len=2048):: info
-  real(ESMF_KIND_R8)          :: ocn_cpl_frq
+  character(len=2048)  :: info
+  real(ESMF_KIND_R8)   :: ocn_cpl_frq
+
+  real, save, allocatable, dimension(:,:) :: si_sice
 
   !-----------------------------------------------------------------------------
   contains
@@ -219,6 +222,10 @@ module hycom_cap
     endif
 
     if (me==0) print *,"DMI_CPL: HYCOM_INIT finished"
+
+    ! Ice salinity
+    allocate( si_sice(1-nbdy:idm+nbdy,1-nbdy:jdm+nbdy) )
+    si_sice=0.0  ! Initial setting and allocate memory space
 
     ! set Component name so it becomes identifiable
 #ifdef TARNOTNEEDED
@@ -637,10 +644,11 @@ module hycom_cap
     logical              :: initFlag
     integer, intent(out) :: rc
     integer i,j
-    real(8) :: xstress, ystress, pang_rev 
+    real(8) :: xstress, ystress, pang_rev
     real(ESMF_KIND_R8), pointer :: dataPtr_sic(:,:),  dataPtr_sit(:,:),  dataPtr_sitx(:,:), &
                                    dataPtr_sity(:,:), dataPtr_siqs(:,:), dataPtr_sifs(:,:), &
-                                   dataPtr_sih(:,:),  dataPtr_sifw(:,:), dataPtr_sifh(:,:)
+                                   dataPtr_sih(:,:),  dataPtr_sifw(:,:), dataPtr_sifh(:,:), &
+                                   dataPtr_sice(:,:)
     call state_getFldPtr(st,"sea_ice_fraction",dataPtr_sic,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
     call state_getFldPtr(st,"sea_ice_temperature",dataPtr_sit,rc=rc)  
@@ -659,6 +667,8 @@ module hycom_cap
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
     call state_getFldPtr(st,"net_heat_flx_to_ocn",dataPtr_sifh,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+    call state_getFldPtr(st,"ice_salinity",dataPtr_sice,rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
 
 !NOT SURE ABOUT THESE FOUR. At least siu and siv should be used.
 !        public cpl_sifh,    sifh_import   ! Ice Freezing/Melting Heat Flux
@@ -670,7 +680,14 @@ module hycom_cap
           covice(i,j) = dataPtr_sic(i,j) !Sea Ice Concentration
           si_c  (i,j) = dataPtr_sic(i,j) !Sea Ice Concentration
           if (covice(i,j).gt.0.0) then
-            flxice(i,j) =  dataPtr_sifh(i,j) ! Sea Ice Heat Flux Freezing potential
+            if (frzh(i,j)>0.0) then
+              ! --- add energy to move tmxl towards tfrz (only if tmxl < tfrz)
+              ! --- include some dependance on sea ice coverage
+!              flxice(i,j) = max( dataPtr_sifh(i,j), frzh(i,j)*max(covice(i,j),0.1) )
+              flxice(i,j) = frzh(i,j)*covice(i,j)
+            else
+              flxice(i,j) = dataPtr_sifh(i,j) ! Sea Ice Heat Flux Freezing potential
+            endif
             xstress     = -dataPtr_sitx(i,j) ! opposite of what ice sees
             ystress     = -dataPtr_sity(i,j) ! oppostite of what ice sees
             pang_rev    = -pang(i,j)         ! Reverse angle
@@ -683,6 +700,7 @@ module hycom_cap
             si_t  (i,j) =  dataPtr_sit(i,j)  !Sea Ice Temperature
             thkice(i,j) =  dataPtr_sih(i,j)  !Sea Ice Thickness
             si_h  (i,j) =  dataPtr_sih(i,j)  !Sea Ice Thickness
+            si_sice(i,j)=  dataPtr_sice(i,j) !Sea Ice Salinity
           else
             si_tx (i,j) =  0.0 !Sea Ice X-Stress into ocean
             si_ty (i,j) =  0.0 !Sea Ice Y-Stress into ocean
@@ -694,6 +712,7 @@ module hycom_cap
             si_t  (i,j) =  0.0 !Sea Ice Temperature
             thkice(i,j) =  0.0 !Sea Ice Thickness
             si_h  (i,j) =  0.0 !Sea Ice Thickness
+            si_sice(i,j)=  0.0 !Sea Ice Salinity
           endif
          
         enddo
@@ -743,7 +762,7 @@ module hycom_cap
     real(kind=ESMF_KIND_R8), pointer  :: dataPtr_mld(:,:)
 
     integer :: i,j
-    real(kind=ESMF_KIND_R8) :: hfrz, t2f, tfrz, smxl, tmxl, ssfi
+    real(kind=ESMF_KIND_R8) :: hfrz, t2f, tfrz, smxl, tmxl, ssfi, tmlt
     real(kind=ESMF_KIND_R8) :: usur1, usur2, vsur1, vsur2, utot, vtot
     real(kind=ESMF_KIND_R8) :: ssh_n,ssh_s,ssh_e,ssh_w,dhdy
     integer                 :: cplfrq
@@ -765,11 +784,17 @@ module hycom_cap
           dataPtr_sst(i,j) = tmxl ! construct SST [C]
           dataPtr_sss(i,j) = smxl ! construct SSS
           hfrz = min( thkfrz*onem, dpbl(i,j) )
-          t2f  = (spcifh*hfrz)/(baclin*real(icefrq)*real(icpfrq)*g)
-          tfrz = tfrz_0 + smxl*tfrz_s  !salinity dependent freezing point
-          ssfi = (tfrz-tmxl)*t2f       !W/m^2 into ocean
-          frzh(i,j) = max(-1000.0,min(1000.0,ssfi)) ! > 0. freezing potential of flxice
-          dataPtr_fmpot(i,j) = frzh(i,j)
+          t2f  = (spcifh*hfrz)/(baclin*dble(icefrq)*dble(icpfrq)*g)
+          tfrz = tfrz_0 + smxl*tfrz_s          ! salinity dependent freezing point: HYCOM
+          tmlt = tfrz_0 + si_sice(i,j)*tfrz_s  ! salinity dependent melting point:  CICE
+          ! Modified melt point of sea ice. Old version only contained the else clause
+          if ((tmlt>tfrz) .and. (tmxl>tfrz)) then
+            ssfi = t2f*min(tmlt,tmlt-tmxl)
+          else
+            ssfi = (tfrz-tmxl)*t2f       !W/m^2 into ocean
+          endif
+          dataPtr_fmpot(i,j) = max(-1000.0,min(1000.0,ssfi)) ! > 0. freezing potential of flxice
+          frzh(i,j)=dataPtr_fmpot(i,j)
         enddo
       enddo
     else
@@ -819,7 +844,6 @@ module hycom_cap
      else
         do j=1,jja
         do i=1,ii
-
               dataPtr_mld(i,j) = 0.
          enddo
         enddo
@@ -906,6 +930,7 @@ module hycom_cap
    call fld_list_add(fldsToOcn_num,fldsToOcn,"net_heat_flx_to_ocn"           ,"1"  ,"will provide") !
    call fld_list_add(fldsToOcn_num,fldsToOcn,"mean_ice_volume"               ,"1"  ,"will provide")
    call fld_list_add(fldsToOcn_num,fldsToOcn,"mean_snow_volume"              ,"1"  ,"will provide")
+   call fld_list_add(fldsToOcn_num,fldsToOcn,"ice_salinity"                  ,"1"  ,"will provide")
 
   end subroutine HYCOM_FieldsSetup
 
