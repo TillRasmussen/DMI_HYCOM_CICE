@@ -21,7 +21,6 @@ endif
 setenv CPPFLAGS '-Dlogerror' # can be logmulti, logerror. Alternatively log is set to none
 setenv debug false # can be true or false
 echo $compiler
-setenv v_esmf v8_0_0 # alternatively v7_1_0r/esmf
 setenv v_esmf v8_0_1/esmf/
 if (${compiler} == 'cray') then
   setenv esmf_compiler 'cce' 

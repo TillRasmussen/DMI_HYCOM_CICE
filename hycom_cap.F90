@@ -785,11 +785,11 @@ module hycom_cap
           dataPtr_sss(i,j) = smxl ! construct SSS
           hfrz = min( thkfrz*onem, dpbl(i,j) )
           t2f  = (spcifh*hfrz)/(baclin*dble(icefrq)*dble(icpfrq)*g)
-          tfrz = tfrz_0 + smxl*tfrz_s          ! salinity dependent freezing point: HYCOM
-          tmlt = tfrz_0 + si_sice(i,j)*tfrz_s  ! salinity dependent melting point:  CICE
+          tfrz = min(0.,tfrz_0 + smxl*tfrz_s)          ! salinity dependent freezing point: HYCOM
+          tmlt = min(0.,tfrz_0 + si_cice(i,j)*tfrz_s)  ! salinity dependent melting point:  CICE
           ! Modified melt point of sea ice. Old version only contained the else clause
           if ((tmlt>tfrz) .and. (tmxl>tfrz)) then
-            ssfi = t2f*min(tmlt,tmlt-tmxl)
+            ssfi = (tmlt-tmxl)*t2f
           else
             ssfi = (tfrz-tmxl)*t2f       !W/m^2 into ocean
           endif
