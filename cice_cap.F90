@@ -1099,12 +1099,12 @@ module cice_cap
           i1 = i - ilo + 1
           j1 = j - jlo + 1
           dataPtr_ifrac   (i1,j1,iblk) = aice(i,j,iblk)    ! ice fraction (0-1)
-          dataPtr_fhocn   (i1,j1,iblk) = fhocn(i,j,iblk)   ! heat exchange with ocean
-          dataPtr_fresh   (i1,j1,iblk) = fresh(i,j,iblk)   ! fresh water to ocean
-          dataPtr_fsalt   (i1,j1,iblk) = fsalt(i,j,iblk)   ! salt to ocean
+          dataPtr_fhocn   (i1,j1,iblk) = fhocn_ai(i,j,iblk)   ! heat exchange with ocean
+          dataPtr_fresh   (i1,j1,iblk) = fresh_ai(i,j,iblk)   ! fresh water to ocean
+          dataPtr_fsalt   (i1,j1,iblk) = fsalt_ai(i,j,iblk)   ! salt to ocean
           dataPtr_vice    (i1,j1,iblk) = vice(i,j,iblk)    ! sea ice volume
           dataPtr_vsno    (i1,j1,iblk) = vsno(i,j,iblk)    ! snow volume
-          dataPtr_fswthru (i1,j1,iblk) = fswthru(i,j,iblk) ! short wave penetration through ice
+          dataPtr_fswthru (i1,j1,iblk) = fswthru_ai(i,j,iblk) ! short wave penetration through ice
           ui = strocnxT(i,j,iblk)
           vj = strocnyT(i,j,iblk)
           angT = ANGLET(i,j,iblk)

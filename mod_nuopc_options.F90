@@ -3,6 +3,7 @@ module mod_nuopc_options
   logical,save,public        :: nuopc_restart  ! If true HYCOM will do a restart. Else Coldstart 
   logical,save,public        :: profile_memory ! If true Profiling around {cice,hycom}_run
   logical,save,public        :: reduce_cpl
+  logical,save,public        :: mushy_frz ! .false. =constant or linear according to hycom, .true.  mushy according to function in HYCOM cap
   
   integer(4), save, public   :: nuopc_tinterval       ! coupling interval 
   integer(4), dimension(4), save, public :: tstart, tend !year, month, day and hour
@@ -26,7 +27,7 @@ module mod_nuopc_options
     namelist /nuopc_nml/ nuopc_tstart, nuopc_tend,nuopc_tinterval, &
                          nuopc_restart, esmf_write_diagnostics,    &
                          ocn_petCount, ice_petCount, profile_memory, &
-                         reduce_cpl
+                         reduce_cpl, mushy_frz
     !default values
     !  in operational runs at time=0 where the model has to be restarted
     nuopc_tstart          = '2017031500' ! start time string
@@ -39,6 +40,7 @@ module mod_nuopc_options
                                 ! *NB*: Set to zero if more than one node (crash).
     reduce_cpl           = .false. ! If true dont couple fields ice thickness and ice termperature as these are not needed
     profile_memory       = .false.
+    mushy_frz            = .true.
     ! read namelist
     open (funi, file='nuopc_opt', status='old',iostat=nml_err)
     if (nml_err < 0) then
@@ -64,6 +66,7 @@ module mod_nuopc_options
       write(6,*)'DMI_CPL: esmf_write_diagnostics:',esmf_write_diagnostics
       write(6,*)'DMI_CPL: profile_memory: ',profile_memory
       write(6,*)'DMI_CPL: reduce_cpl NOT IMPLEMENTED. SET TO TRUE HAS NO INFLUENCE: ', reduce_cpl
+      write(6,*)'DMI_CPL: HYCOM uses mushy freezing point: ', mushy_frz
     endif
     !-- Adjust start/end times
     read (nuopc_tstart(1:4),*) tstart(1)

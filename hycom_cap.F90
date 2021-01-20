@@ -10,7 +10,8 @@ module hycom_cap
   use mod_hycom_nuopc_glue
   use mod_dimensions, only : idm,jdm,nbdy
   use mod_cb_arrays_nuopc_glue
-  use mod_nuopc_options, only: esmf_write_diagnostics, nuopc_restart, profile_memory, nuopc_tinterval
+  use mod_nuopc_options, only: esmf_write_diagnostics, nuopc_restart, profile_memory, & 
+                               nuopc_tinterval, mushy_frz
   use ESMF
   use NUOPC
   use NUOPC_Model, &
@@ -54,7 +55,7 @@ module hycom_cap
   character(len=2048)  :: info
   real(ESMF_KIND_R8)   :: ocn_cpl_frq
 
-  real, save, allocatable, dimension(:,:) :: si_sice
+  real(ESMF_KIND_R8), save, allocatable, dimension(:,:) :: si_sice
 
   !-----------------------------------------------------------------------------
   contains
@@ -647,6 +648,7 @@ module hycom_cap
     integer, intent(out) :: rc
     integer i,j
     real(8) :: xstress, ystress, pang_rev
+    real(kind=ESMF_KIND_R8) :: smxl
     real(ESMF_KIND_R8), pointer :: dataPtr_sic(:,:),  dataPtr_sit(:,:),  dataPtr_sitx(:,:), &
                                    dataPtr_sity(:,:), dataPtr_siqs(:,:), dataPtr_sifs(:,:), &
                                    dataPtr_sih(:,:),  dataPtr_sifw(:,:), dataPtr_sifh(:,:), &
@@ -681,13 +683,14 @@ module hycom_cap
         do i=1,ii
           covice(i,j) = dataPtr_sic(i,j) !Sea Ice Concentration
           si_c  (i,j) = dataPtr_sic(i,j) !Sea Ice Concentration
+!!!!!NOTE TROR FRZH SKAL LÆGGES TIL DET HELE!!!
           if (covice(i,j).gt.0.0) then
             if (frzh(i,j)>0.0) then
               ! --- add energy to move tmxl towards tfrz (only if tmxl < tfrz)
 !             This is all the available for freezing. This has been cell averaged
 !             Assumes all ocean is transformed to ice
 !             
-              flxice(i,j) = frzh(i,j)!*covice(i,j)
+              flxice(i,j) = frzh(i,j)+dataPtr_sifh(i,j)!*covice(i,j)
             else
               flxice(i,j) = dataPtr_sifh(i,j) ! Sea Ice Heat Flux Freezing potential
             endif
@@ -697,7 +700,15 @@ module hycom_cap
             si_tx (i,j) =  xstress*cos(pang_rev) - ystress*sin(pang_rev)
             si_ty (i,j) =  xstress*sin(pang_rev) + ystress*cos(pang_rev)
             fswice(i,j) =  dataPtr_siqs(i,j) !Solar Heat Flux thru Ice to Ocean already in swflx
-            sflice(i,j) =  dataPtr_sifs(i,j)*1.e3 !Ice Freezing/Melting Salt Flux
+            wflice(i,j) =  dataPtr_sifw(i,j) !Ice Water Flux
+            smxl = 0.5*(saln(i,j,1,2)+saln(i,j,1,1))
+            if (wflice(i,j)<0. .and. smxl <1.) then 
+               sflice(i,j)=MAX(dataPtr_sifs(i,j),wflice(i,j)*smxl/1000.0)*1.e3
+               write(6,*) dataPtr_sifs(i,j), wflice(i,j)*smxl/1000.0,smxl
+               call flush(6)
+            else
+                sflice(i,j) =  dataPtr_sifs(i,j)*1.e3 !Ice Freezing/Melting Salt Flux
+            endif
             wflice(i,j) =  dataPtr_sifw(i,j) !Ice Water Flux
             temice(i,j) =  dataPtr_sit(i,j)  !Sea Ice Temperature
             si_t  (i,j) =  dataPtr_sit(i,j)  !Sea Ice Temperature
@@ -755,6 +766,7 @@ module hycom_cap
     logical              :: initflag
     integer, intent(out) :: rc
 
+
     real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sst(:,:)
     real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sss(:,:)
     real(kind=ESMF_KIND_R8), pointer  :: dataPtr_sssz(:,:)
@@ -769,7 +781,7 @@ module hycom_cap
     real(kind=ESMF_KIND_R8) :: usur1, usur2, vsur1, vsur2, utot, vtot
     real(kind=ESMF_KIND_R8) :: ssh_n,ssh_s,ssh_e,ssh_w,dhdy
     integer                 :: cplfrq
-
+   
 ! do sst and salinity at the same time
     call State_getFldPtr(st,'sea_surface_temperature',dataPtr_sst,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
@@ -788,8 +800,13 @@ module hycom_cap
           dataPtr_sss(i,j) = smxl ! construct SSS
           hfrz = min( thkfrz*onem, dpbl(i,j) )
           t2f  = (spcifh*hfrz)/(baclin*dble(icpfrq)*g)
-          tfrz = min(0.,tfrz_0 + smxl*tfrz_s)          ! salinity dependent freezing point: HYCOM
-          tmlt = max(tfrz,min(0.,tfrz_0 + si_sice(i,j)*tfrz_s))  ! salinity dependent melting point:  CICE
+          if (mushy_frz) then
+             tfrz = liquidus_temperature_mush(smxl)  ! mushy
+             tmlt = max(tfrz,min(0.,liquidus_temperature_mush(si_sice(i,j)))) !mushy
+          else
+             tfrz = min(0.,tfrz_0 + smxl*tfrz_s)          ! salinity dependent freezing point: HYCOM
+             tmlt = max(tfrz,min(0.,tfrz_0 + si_sice(i,j)*tfrz_s))  ! salinity dependent melting point:  CICE
+          endif
           ! Modified melt point of sea ice. Old version only contained the else clause
           ! tmlt must be equal or higher than tfrz
           !W/m^2 into ocean 
@@ -964,7 +981,6 @@ module hycom_cap
         ESMF_LOGMSG_ERROR, line=__LINE__, file=__FILE__, rc=rc)
       return
     endif
-
     fldlist(num)%stdname        = trim(stdname)
     fldlist(num)%canonicalUnits = trim(canonicalUnits)
     if (present(shortname)) then
@@ -1037,6 +1053,64 @@ module hycom_cap
 
   end subroutine State_GetFldPtr
 
+  function liquidus_temperature_mush(Sbr) result(zTin)
+
+    ! liquidus relation: equilibrium temperature as function of brine salinity
+    ! based on empirical data from Assur (1958)
+
+    real(ESMF_KIND_R8), intent(in) :: &
+         Sbr    ! ice brine salinity (ppt)
+
+    real(ESMF_KIND_R8) :: &
+         zTin   ! ice layer temperature (C)
+
+    real(ESMF_KIND_R8) :: &
+         t_high ! mask for high temperature liquidus region
+
+    real(ESMF_KIND_R8) :: &
+       M1_liq, &! brine salinity to temperature
+       N1_liq, &
+       O1_liq, &
+       M2_liq, &
+       N2_liq, &
+       O2_liq
+
+    character(len=*),parameter :: subname='(liquidus_temperature_mush)'
+
+ real(ESMF_KIND_R8), parameter :: &
+       az1_liq = -18.48, &
+       bz1_liq =    0.0
+
+  ! liquidus relation - lower temperature region
+  real(ESMF_KIND_R8), parameter :: &
+       az2_liq = -10.3085, &
+       bz2_liq =     62.4
+
+ ! liquidus break
+  real(ESMF_KIND_R8), parameter :: &
+       Tb_liq = -7.6362968855167352, & ! temperature of liquidus break
+       Sb_liq =  123.66702800276086    ! salinity of liquidus break
+
+ real(ESMF_KIND_R8), parameter :: &
+       az1p_liq = az1_liq / 1000., &
+       bz1p_liq = bz1_liq / 1000., &
+       az2p_liq = az2_liq / 1000., &
+       bz2p_liq = bz2_liq / 1000.
+
+    ! brine salinity to temperature
+    M1_liq = az1_liq
+    N1_liq = -az1p_liq
+    O1_liq = -bz1_liq / az1_liq
+    M2_liq = az2_liq
+    N2_liq = -az2p_liq
+    O2_liq = -bz2_liq / az2_liq
+
+    t_high = merge(1., 0., (Sbr <= Sb_liq))
+
+    zTin = ((Sbr / (M1_liq + N1_liq * Sbr)) + O1_liq) * t_high + &
+          ((Sbr / (M2_liq + N2_liq * Sbr)) + O2_liq) * (1. - t_high)
+
+  end function liquidus_temperature_mush
 
   !-----------------------------------------------------------------------------
 end module hycom_cap
