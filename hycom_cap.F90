@@ -702,14 +702,13 @@ module hycom_cap
             fswice(i,j) =  dataPtr_siqs(i,j) !Solar Heat Flux thru Ice to Ocean already in swflx
             wflice(i,j) =  dataPtr_sifw(i,j) !Ice Water Flux
             smxl = 0.5*(saln(i,j,1,2)+saln(i,j,1,1))
+! THIS REDUCES THE NEGATIVE ADVEM WARNINGS IN HYCOM. These occour mainly in the siberian rivers and appear to be round of.
+! NOTED IN NAAF. INSPIRED BY NEMO - CICE
             if (wflice(i,j)<0. .and. smxl <1.) then 
                sflice(i,j)=MAX(dataPtr_sifs(i,j),wflice(i,j)*smxl/1000.0)*1.e3
-               write(6,*) dataPtr_sifs(i,j), wflice(i,j)*smxl/1000.0,smxl
-               call flush(6)
             else
                 sflice(i,j) =  dataPtr_sifs(i,j)*1.e3 !Ice Freezing/Melting Salt Flux
             endif
-            wflice(i,j) =  dataPtr_sifw(i,j) !Ice Water Flux
             temice(i,j) =  dataPtr_sit(i,j)  !Sea Ice Temperature
             si_t  (i,j) =  dataPtr_sit(i,j)  !Sea Ice Temperature
             thkice(i,j) =  dataPtr_sih(i,j)  !Sea Ice Thickness
@@ -795,7 +794,7 @@ module hycom_cap
       do j=1,jja
         do i=1,ii
           tmxl = 0.5*(temp(i,j,1,2)+temp(i,j,1,1))
-          smxl = 0.5*(saln(i,j,1,2)+saln(i,j,1,1))
+          smxl = max(0.5*(saln(i,j,1,2)+saln(i,j,1,1)),si_sice(i,j))
           dataPtr_sst(i,j) = tmxl ! construct SST [C]
           dataPtr_sss(i,j) = smxl ! construct SSS
           hfrz = min( thkfrz*onem, dpbl(i,j) )
@@ -827,7 +826,6 @@ module hycom_cap
       dataPtr_sst(:,:)   = 0.
       dataPtr_sss(:,:)   = 0.
     endif
-
     call State_getFldPtr(st,'sea_surface_slope_zonal',dataPtr_sssz,rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
     call State_getFldPtr(st,'sea_surface_slope_merid',dataPtr_sssm,rc=rc)
