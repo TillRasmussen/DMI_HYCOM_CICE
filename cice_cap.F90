@@ -574,28 +574,32 @@ module cice_cap
   !-----------------------------------------------------------------------------
 
   subroutine ModelAdvance(gcomp, rc)
-    type(ESMF_GridComp)                    :: gcomp
-    integer, intent(out)                   :: rc
+    use mod_nuopc_options, only  : tend
+
+    type(ESMF_GridComp)         :: gcomp
+    integer, intent(out)        :: rc
     
     ! local variables
-    type(ESMF_Clock)                       :: clock
-    type(ESMF_State)                       :: importState, exportState
-    type(ESMF_Time)                        :: currTime
-    type(ESMF_TimeInterval)                :: timeStep
-    type(ESMF_Field)                       :: lfield,lfield2d
-    type(ESMF_Grid)                        :: grid
-    real(ESMF_KIND_R8), pointer            :: fldptr(:,:,:)
-    real(ESMF_KIND_R8), pointer            :: fldptr2d(:,:)
-    type(block)                            :: this_block
-    character(len=64)                      :: fldname
-    integer                                :: i,j,iblk,n,i1,i2,j1,j2
-    integer                                :: ilo,ihi,jlo,jhi
-    real(ESMF_KIND_R8)                     :: ue, vn, ui, vj
-!    real(ESMF_KIND_R8)                     :: sigma_r, sigma_l, sigma_c
-    type(ESMF_StateItem_Flag)              :: itemType
+    type(ESMF_Clock)            :: clock
+    type(ESMF_State)            :: importState, exportState
+    type(ESMF_Time)             :: currTime, finalTime
+    type(ESMF_TimeInterval)     :: timeStep, interval
+    type(ESMF_Field)            :: lfield,lfield2d
+    type(ESMF_Grid)             :: grid
+    real(ESMF_KIND_R8), pointer :: fldptr(:,:,:)
+    real(ESMF_KIND_R8), pointer :: fldptr2d(:,:)
+    real(ESMF_KIND_R8)          :: next_minus_finalTime_r8
+    type(block)                 :: this_block
+    character(len=64)           :: fldname
+    integer                     :: i,j,iblk,n,i1,i2,j1,j2
+    integer                     :: ilo,ihi,jlo,jhi
+    real(ESMF_KIND_R8)          :: ue, vn, ui, vj
+!    real(ESMF_KIND_R8)          :: sigma_r, sigma_l, sigma_c
+    type(ESMF_StateItem_Flag)   :: itemType
     character(240)              :: msgString
-    type(ESMF_VM) :: vm
-    integer       :: me, npes
+    type(ESMF_VM)               :: vm
+    integer                     :: me, npes
+    logical                     :: stop_now_cpl
     character(len=*),parameter  :: subname='(cice_cap:ModelAdvance)'
     rc = ESMF_SUCCESS
 ! Get information about processors vm distribution etc.
@@ -653,8 +657,23 @@ module cice_cap
       file=__FILE__)) &
       return  ! bail out
 
-!MHRI    if (me==1) call ESMF_TimePrint(currTime + timeStep, &
+!MHRI    if (me==0) call ESMF_TimePrint(currTime + timeStep, &
 !MHRI                     preString="DMI_CPL: ------------------> to: ", rc=rc)
+
+    call ESMF_TimeSet(finalTime, yy=tend(1), mm=tend(2), dd=tend(3), h=tend(4), m=0, &
+                      calkindflag=ESMF_CALKIND_GREGORIAN, rc=rc)
+    interval = currTime-finalTime+timeStep
+    call ESMF_TimeIntervalGet(interval, d_r8=next_minus_finalTime_r8, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    stop_now_cpl = next_minus_finalTime_r8>=0.
+
+!    if (me==0) then
+!       call ESMF_TimePrint(finalTime, preString="MHRI: FinalTime : ",rc=rc)
+!       write(6,*)'MHRI: next_minus_finalTime_r8=',next_minus_finalTime_r8, next_minus_finalTime_r8>=0.
+!    endif
 
     call CICE_Import(importState,rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -677,7 +696,7 @@ module cice_cap
     write(info,*) subname,' --- run phase 2 called --- '
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
     if (profile_memory) call ESMF_VMLogMemInfo("Before CICE_Run")
-    call CICE_Run
+    call CICE_Run( stop_now_cpl )
     if (profile_memory) call ESMF_VMLogMemInfo("After CICE_Run")
 
     write(info,*) subname,' --- run phase 3 called --- '
@@ -714,7 +733,7 @@ module cice_cap
     
     ! local variables
     type(ESMF_Clock)     :: clock
-    type(ESMF_Time)                        :: currTime
+    type(ESMF_Time)      :: currTime
     character(len=*),parameter  :: subname='(cice_cap:cice_model_finalize)'
 
     rc = ESMF_SUCCESS
