@@ -9,6 +9,7 @@ module hycom_cap
 
   use mod_hycom_nuopc_glue
   use mod_dimensions, only : idm,jdm,nbdy
+  use icepack_parameters, only: puny
   use mod_cb_arrays_nuopc_glue
   use mod_nuopc_options, only: esmf_write_diagnostics, nuopc_restart, profile_memory, & 
                                nuopc_tinterval, mushy_frz
@@ -508,6 +509,11 @@ module hycom_cap
       file=__FILE__)) &
       return  ! bail out
 
+!    if (me==0) call ESMF_ClockPrint(clock, options="currTime", &
+!       preString="DMI_CPL: -->Advancing HYCOM from: ", rc=rc)
+!    if (me==0) call ESMF_ClockPrint(clock, options="stopTime", &
+!       preString="DMI_CPL: -------------------> to: ", rc=rc)
+
     !TODO: don't need the additional initialization step once data-dependency
     !TODO: is taken care of during initialize.
     initFlag = .false.
@@ -683,16 +689,16 @@ module hycom_cap
         do i=1,ii
           covice(i,j) = dataPtr_sic(i,j) !Sea Ice Concentration
           si_c  (i,j) = dataPtr_sic(i,j) !Sea Ice Concentration
-!!!!!NOTE TROR FRZH SKAL LÆGGES TIL DET HELE!!!
-          if (covice(i,j).gt.0.0) then
+! CICE use puny as criterium (fewer copy commands). Moreover, if used for final differences, these calculations would be affected differently depending on puny vs. 0.0.
+!          if (covice(i,j)>0.0) then
+          if (covice(i,j)>puny) then
             if (frzh(i,j)>0.0) then
               ! --- add energy to move tmxl towards tfrz (only if tmxl < tfrz)
-!             This is all the available for freezing. This has been cell averaged
-!             Assumes all ocean is transformed to ice
-!             
-              flxice(i,j) = frzh(i,j)+dataPtr_sifh(i,j)!*covice(i,j)
+              ! This is all the available for freezing. This has been cell averaged
+              ! Assumes all ocean energy is transformed to ice
+              flxice(i,j) = dataPtr_sifh(i,j) + frzh(i,j)
             else
-              flxice(i,j) = dataPtr_sifh(i,j) ! Sea Ice Heat Flux Freezing potential
+              flxice(i,j) = dataPtr_sifh(i,j)  ! Sea Ice Heat Flux Freezing potential
             endif
             xstress     = -dataPtr_sitx(i,j) ! opposite of what ice sees
             ystress     = -dataPtr_sity(i,j) ! oppostite of what ice sees
@@ -702,12 +708,13 @@ module hycom_cap
             fswice(i,j) =  dataPtr_siqs(i,j) !Solar Heat Flux thru Ice to Ocean already in swflx
             wflice(i,j) =  dataPtr_sifw(i,j) !Ice Water Flux
             smxl = 0.5*(saln(i,j,1,2)+saln(i,j,1,1))
-! THIS REDUCES THE NEGATIVE ADVEM WARNINGS IN HYCOM. These occour mainly in the siberian rivers and appear to be round of.
-! NOTED IN NAAF. INSPIRED BY NEMO - CICE
             if (wflice(i,j)<0. .and. smxl <1.) then 
+               ! THIS REDUCES THE NEGATIVE ADVEM WARNINGS IN HYCOM. These occour mainly in the siberian rivers and appear to be round off.
+               ! NOTED IN NAAF. INSPIRED BY NEMO - CICE
+               ! MHRI: Also seen in the Baltic for salinities higher than 0,1,2 salinity-units
                sflice(i,j)=MAX(dataPtr_sifs(i,j),wflice(i,j)*smxl/1000.0)*1.e3
             else
-                sflice(i,j) =  dataPtr_sifs(i,j)*1.e3 !Ice Freezing/Melting Salt Flux
+               sflice(i,j) =  dataPtr_sifs(i,j)*1.e3 !Ice Freezing/Melting Salt Flux
             endif
             temice(i,j) =  dataPtr_sit(i,j)  !Sea Ice Temperature
             si_t  (i,j) =  dataPtr_sit(i,j)  !Sea Ice Temperature
@@ -718,7 +725,7 @@ module hycom_cap
             si_tx (i,j) =  0.0 !Sea Ice X-Stress into ocean
             si_ty (i,j) =  0.0 !Sea Ice Y-Stress into ocean
             fswice(i,j) =  0.0 !Solar Heat Flux thru Ice to Ocean already in swflx
-            flxice(i,j) =  0.0 !freeze/melt potential
+            flxice(i,j) = max(frzh(i,j),0.0)  ! If positive (tfrz>tmxl): Energy for new sea-ice formation (send to CICE) heats up ocean by same amount
             sflice(i,j) =  0.0 !Ice Freezing/Melting Salt Flux
             wflice(i,j) =  0.0 !Ice Water Flux
             temice(i,j) =  0.0 !Sea Ice Temperature
@@ -797,24 +804,23 @@ module hycom_cap
           smxl = max(0.5*(saln(i,j,1,2)+saln(i,j,1,1)),si_sice(i,j))
           dataPtr_sst(i,j) = tmxl ! construct SST [C]
           dataPtr_sss(i,j) = smxl ! construct SSS
-          hfrz = min( thkfrz*onem, dpbl(i,j) )
+          hfrz = min( thkfrz*onem, dpbl(i,j) )     ! dpbl: turbulent boundary layer depth
           t2f  = (spcifh*hfrz)/(baclin*dble(icpfrq)*g)
           if (mushy_frz) then
-             tfrz = liquidus_temperature_mush(smxl)  ! mushy
-             tmlt = max(tfrz,min(0.,liquidus_temperature_mush(si_sice(i,j)))) !mushy
+             tfrz = liquidus_temperature_mush(smxl)                           ! mushy
+             tmlt = max(tfrz,min(0.,liquidus_temperature_mush(si_sice(i,j)))) ! mushy
           else
-             tfrz = min(0.,tfrz_0 + smxl*tfrz_s)          ! salinity dependent freezing point: HYCOM
+             tfrz = min(0.,tfrz_0 + smxl*tfrz_s)                    ! salinity dependent freezing point: HYCOM
              tmlt = max(tfrz,min(0.,tfrz_0 + si_sice(i,j)*tfrz_s))  ! salinity dependent melting point:  CICE
           endif
-          ! Modified melt point of sea ice. Old version only contained the else clause
-          ! tmlt must be equal or higher than tfrz
-          !W/m^2 into ocean 
+          ! Modified melt point of sea ice. tmlt must be equal or higher than tfrz
+          !   Old version only contained: ssfi = (tfrz-tmxl)*t2f
           if (tmxl < tfrz) then
-            ssfi = (tfrz-tmxl)*t2f       !W/m^2 into ocean
+            ssfi = (tfrz-tmxl)*t2f       !W/m^2 into ocean (ice freezing), positive
           else if (tmxl > tmlt) then
-            ssfi = (tmlt - tmxl)*t2f
+            ssfi = (tmlt-tmxl)*t2f       !W/m2 out of ocean (ice melting), negative
           else
-            ssfi = 0.
+            ssfi = 0.                    ! tfrz < tmxl < tmlt
           endif
           frzh(i,j) = max(-1000.0,min(1000.0,ssfi)) ! > 0. freezing potential of flxice
           dataPtr_fmpot(i,j) = frzh(i,j)
