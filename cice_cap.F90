@@ -20,7 +20,6 @@ module cice_cap
   use ice_flux
   use ice_grid, only: TLAT, TLON, ULAT, ULON, hm, tarea, ANGLET, ANGLE, &
                       dxt, dyt, grid_average_X2Y
-!                      dxt, dyt, t2ugrid_vector
   use icepack_parameters, only: puny
   use ice_state
   use CICE_RunMod
