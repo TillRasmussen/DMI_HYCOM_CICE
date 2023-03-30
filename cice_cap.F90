@@ -19,7 +19,9 @@ module cice_cap
   use ice_calendar,  only: dt
   use ice_flux
   use ice_grid, only: TLAT, TLON, ULAT, ULON, hm, tarea, ANGLET, ANGLE, &
-                      dxt, dyt, t2ugrid_vector
+                      dxt, dyt, grid_average_X2Y
+!                      dxt, dyt, t2ugrid_vector
+  use icepack_parameters, only: puny
   use ice_state
   use CICE_RunMod
   use CICE_InitMod
@@ -1033,6 +1035,7 @@ module cice_cap
           sss    (i,j,iblk) = dataPtr_sss  (i1,j1,iblk)  ! sea surface salinity (maybe for mushy layer)
           sst    (i,j,iblk) = dataPtr_sst  (i1,j1,iblk)  ! sea surface temp [C] (may not be needed?)
           frzmlt (i,j,iblk) = dataPtr_fmpot(i1,j1,iblk)
+          ! C-grid: (U,V) to T grid cell and rotate
           ue = dataPtr_ocncz  (i1,j1,iblk)
           vn = dataPtr_ocncm  (i1,j1,iblk)
           AngT_s = ANGLET(i,j,iblk)
@@ -1044,10 +1047,11 @@ module cice_cap
           ss_tlty(i,j,iblk) = ue*sin(AngT_s) + vn*cos(AngT_s)
        enddo
        enddo
-       call t2ugrid_vector(ss_tltx)
-       call t2ugrid_vector(ss_tlty)
-       call t2ugrid_vector(uocn)
-       call t2ugrid_vector(vocn)
+       ! B-grid: T to U grid cell
+       call grid_average_X2Y('S', ss_tltx, 'T', ss_tltx, 'U')
+       call grid_average_X2Y('S', ss_tlty, 'T', ss_tlty, 'U')
+       call grid_average_X2Y('S', uocn, 'T', uocn, 'U')
+       call grid_average_X2Y('S', vocn, 'T', vocn, 'U')
     enddo
 
   end subroutine CICE_Import
@@ -1117,18 +1121,22 @@ module cice_cap
         do i = ilo,ihi
           i1 = i - ilo + 1
           j1 = j - jlo + 1
-          dataPtr_ifrac   (i1,j1,iblk) = aice(i,j,iblk)    ! ice fraction (0-1)
+          if (aice(i,j,iblk) < puny) then
+            dataPtr_ifrac (i1,j1,iblk) = 0._ESMF_KIND_R8      ! CICE threats aice<puny as open water, ie. aice=0
+          else
+            dataPtr_ifrac (i1,j1,iblk) = aice(i,j,iblk)       ! ice fraction (0-1)
+          endif
           dataPtr_fhocn   (i1,j1,iblk) = fhocn_ai(i,j,iblk)   ! heat exchange with ocean
           dataPtr_fresh   (i1,j1,iblk) = fresh_ai(i,j,iblk)   ! fresh water to ocean
           dataPtr_fsalt   (i1,j1,iblk) = fsalt_ai(i,j,iblk)   ! salt to ocean
-          dataPtr_vice    (i1,j1,iblk) = vice(i,j,iblk)    ! sea ice volume
-          dataPtr_vsno    (i1,j1,iblk) = vsno(i,j,iblk)    ! snow volume
+          dataPtr_vice    (i1,j1,iblk) = vice(i,j,iblk)       ! sea ice volume
+          dataPtr_vsno    (i1,j1,iblk) = vsno(i,j,iblk)       ! snow volume
           dataPtr_fswthru (i1,j1,iblk) = fswthru_ai(i,j,iblk) ! short wave penetration through ice
-          ui = strocnxT(i,j,iblk)
-          vj = strocnyT(i,j,iblk)
+          ui = strocnxT_iavg(i,j,iblk)
+          vj = strocnyT_iavg(i,j,iblk)
           angT = ANGLET(i,j,iblk)
           dataPtr_strocnxT(i1,j1,iblk) =  ui*cos(-angT) + vj*sin(angT)  ! ice ocean stress
-          dataPtr_strocnyT(i1,j1,iblk) = -ui*sin(angT)  + vj*cos(-angT)  ! ice ocean stress
+          dataPtr_strocnyT(i1,j1,iblk) = -ui*sin(angT)  + vj*cos(-angT) ! ice ocean stress
           !-- sice (ice_history.F90)
           if (nt_sice<1) then
             sice = 0._ESMF_KIND_R8
