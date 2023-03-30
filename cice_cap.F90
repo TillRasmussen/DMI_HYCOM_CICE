@@ -19,7 +19,8 @@ module cice_cap
   use ice_calendar,  only: dt
   use ice_flux
   use ice_grid, only: TLAT, TLON, ULAT, ULON, hm, tarea, ANGLET, ANGLE, &
-                      dxt, dyt, t2ugrid_vector
+                      dxt, dyt, grid_average_X2Y
+  use icepack_parameters, only: puny
   use ice_state
   use CICE_RunMod
   use CICE_InitMod
@@ -574,28 +575,32 @@ module cice_cap
   !-----------------------------------------------------------------------------
 
   subroutine ModelAdvance(gcomp, rc)
-    type(ESMF_GridComp)                    :: gcomp
-    integer, intent(out)                   :: rc
+    use mod_nuopc_options, only  : tend
+
+    type(ESMF_GridComp)         :: gcomp
+    integer, intent(out)        :: rc
     
     ! local variables
-    type(ESMF_Clock)                       :: clock
-    type(ESMF_State)                       :: importState, exportState
-    type(ESMF_Time)                        :: currTime
-    type(ESMF_TimeInterval)                :: timeStep
-    type(ESMF_Field)                       :: lfield,lfield2d
-    type(ESMF_Grid)                        :: grid
-    real(ESMF_KIND_R8), pointer            :: fldptr(:,:,:)
-    real(ESMF_KIND_R8), pointer            :: fldptr2d(:,:)
-    type(block)                            :: this_block
-    character(len=64)                      :: fldname
-    integer                                :: i,j,iblk,n,i1,i2,j1,j2
-    integer                                :: ilo,ihi,jlo,jhi
-    real(ESMF_KIND_R8)                     :: ue, vn, ui, vj
-!    real(ESMF_KIND_R8)                     :: sigma_r, sigma_l, sigma_c
-    type(ESMF_StateItem_Flag)              :: itemType
+    type(ESMF_Clock)            :: clock
+    type(ESMF_State)            :: importState, exportState
+    type(ESMF_Time)             :: currTime, finalTime
+    type(ESMF_TimeInterval)     :: timeStep, interval
+    type(ESMF_Field)            :: lfield,lfield2d
+    type(ESMF_Grid)             :: grid
+    real(ESMF_KIND_R8), pointer :: fldptr(:,:,:)
+    real(ESMF_KIND_R8), pointer :: fldptr2d(:,:)
+    real(ESMF_KIND_R8)          :: next_minus_finalTime_r8
+    type(block)                 :: this_block
+    character(len=64)           :: fldname
+    integer                     :: i,j,iblk,n,i1,i2,j1,j2
+    integer                     :: ilo,ihi,jlo,jhi
+    real(ESMF_KIND_R8)          :: ue, vn, ui, vj
+!    real(ESMF_KIND_R8)          :: sigma_r, sigma_l, sigma_c
+    type(ESMF_StateItem_Flag)   :: itemType
     character(240)              :: msgString
-    type(ESMF_VM) :: vm
-    integer       :: me, npes
+    type(ESMF_VM)               :: vm
+    integer                     :: me, npes
+    logical                     :: stop_now_cpl
     character(len=*),parameter  :: subname='(cice_cap:ModelAdvance)'
     rc = ESMF_SUCCESS
 ! Get information about processors vm distribution etc.
@@ -653,8 +658,23 @@ module cice_cap
       file=__FILE__)) &
       return  ! bail out
 
-!MHRI    if (me==1) call ESMF_TimePrint(currTime + timeStep, &
+!MHRI    if (me==0) call ESMF_TimePrint(currTime + timeStep, &
 !MHRI                     preString="DMI_CPL: ------------------> to: ", rc=rc)
+
+    call ESMF_TimeSet(finalTime, yy=tend(1), mm=tend(2), dd=tend(3), h=tend(4), m=0, &
+                      calkindflag=ESMF_CALKIND_GREGORIAN, rc=rc)
+    interval = currTime-finalTime+timeStep
+    call ESMF_TimeIntervalGet(interval, d_r8=next_minus_finalTime_r8, rc=rc)
+    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
+      line=__LINE__, &
+      file=__FILE__)) &
+      return  ! bail out
+    stop_now_cpl = next_minus_finalTime_r8>=0.
+
+!    if (me==0) then
+!       call ESMF_TimePrint(finalTime, preString="MHRI: FinalTime : ",rc=rc)
+!       write(6,*)'MHRI: next_minus_finalTime_r8=',next_minus_finalTime_r8, next_minus_finalTime_r8>=0.
+!    endif
 
     call CICE_Import(importState,rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
@@ -677,7 +697,7 @@ module cice_cap
     write(info,*) subname,' --- run phase 2 called --- '
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
     if (profile_memory) call ESMF_VMLogMemInfo("Before CICE_Run")
-    call CICE_Run
+    call CICE_Run( stop_now_cpl )
     if (profile_memory) call ESMF_VMLogMemInfo("After CICE_Run")
 
     write(info,*) subname,' --- run phase 3 called --- '
@@ -714,7 +734,7 @@ module cice_cap
     
     ! local variables
     type(ESMF_Clock)     :: clock
-    type(ESMF_Time)                        :: currTime
+    type(ESMF_Time)      :: currTime
     character(len=*),parameter  :: subname='(cice_cap:cice_model_finalize)'
 
     rc = ESMF_SUCCESS
@@ -1014,6 +1034,7 @@ module cice_cap
           sss    (i,j,iblk) = dataPtr_sss  (i1,j1,iblk)  ! sea surface salinity (maybe for mushy layer)
           sst    (i,j,iblk) = dataPtr_sst  (i1,j1,iblk)  ! sea surface temp [C] (may not be needed?)
           frzmlt (i,j,iblk) = dataPtr_fmpot(i1,j1,iblk)
+          ! C-grid: (U,V) to T grid cell and rotate
           ue = dataPtr_ocncz  (i1,j1,iblk)
           vn = dataPtr_ocncm  (i1,j1,iblk)
           AngT_s = ANGLET(i,j,iblk)
@@ -1025,10 +1046,11 @@ module cice_cap
           ss_tlty(i,j,iblk) = ue*sin(AngT_s) + vn*cos(AngT_s)
        enddo
        enddo
-       call t2ugrid_vector(ss_tltx)
-       call t2ugrid_vector(ss_tlty)
-       call t2ugrid_vector(uocn)
-       call t2ugrid_vector(vocn)
+       ! B-grid: T to U grid cell
+       call grid_average_X2Y('S', ss_tltx, 'T', ss_tltx, 'U')
+       call grid_average_X2Y('S', ss_tlty, 'T', ss_tlty, 'U')
+       call grid_average_X2Y('S', uocn, 'T', uocn, 'U')
+       call grid_average_X2Y('S', vocn, 'T', vocn, 'U')
     enddo
 
   end subroutine CICE_Import
@@ -1098,18 +1120,22 @@ module cice_cap
         do i = ilo,ihi
           i1 = i - ilo + 1
           j1 = j - jlo + 1
-          dataPtr_ifrac   (i1,j1,iblk) = aice(i,j,iblk)    ! ice fraction (0-1)
+          if (aice(i,j,iblk) < puny) then
+            dataPtr_ifrac (i1,j1,iblk) = 0._ESMF_KIND_R8      ! CICE threats aice<puny as open water, ie. aice=0
+          else
+            dataPtr_ifrac (i1,j1,iblk) = aice(i,j,iblk)       ! ice fraction (0-1)
+          endif
           dataPtr_fhocn   (i1,j1,iblk) = fhocn_ai(i,j,iblk)   ! heat exchange with ocean
           dataPtr_fresh   (i1,j1,iblk) = fresh_ai(i,j,iblk)   ! fresh water to ocean
           dataPtr_fsalt   (i1,j1,iblk) = fsalt_ai(i,j,iblk)   ! salt to ocean
-          dataPtr_vice    (i1,j1,iblk) = vice(i,j,iblk)    ! sea ice volume
-          dataPtr_vsno    (i1,j1,iblk) = vsno(i,j,iblk)    ! snow volume
+          dataPtr_vice    (i1,j1,iblk) = vice(i,j,iblk)       ! sea ice volume
+          dataPtr_vsno    (i1,j1,iblk) = vsno(i,j,iblk)       ! snow volume
           dataPtr_fswthru (i1,j1,iblk) = fswthru_ai(i,j,iblk) ! short wave penetration through ice
-          ui = strocnxT(i,j,iblk)
-          vj = strocnyT(i,j,iblk)
+          ui = strocnxT_iavg(i,j,iblk)
+          vj = strocnyT_iavg(i,j,iblk)
           angT = ANGLET(i,j,iblk)
           dataPtr_strocnxT(i1,j1,iblk) =  ui*cos(-angT) + vj*sin(angT)  ! ice ocean stress
-          dataPtr_strocnyT(i1,j1,iblk) = -ui*sin(angT)  + vj*cos(-angT)  ! ice ocean stress
+          dataPtr_strocnyT(i1,j1,iblk) = -ui*sin(angT)  + vj*cos(-angT) ! ice ocean stress
           !-- sice (ice_history.F90)
           if (nt_sice<1) then
             sice = 0._ESMF_KIND_R8
