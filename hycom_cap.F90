@@ -9,7 +9,6 @@ module hycom_cap
 
   use mod_hycom_nuopc_glue
   use mod_dimensions, only : idm,jdm,nbdy
-  use icepack_parameters, only: puny
   use mod_cb_arrays_nuopc_glue
   use mod_nuopc_options, only: esmf_write_diagnostics, nuopc_restart, profile_memory, & 
                                nuopc_tinterval, mushy_frz
@@ -689,9 +688,8 @@ module hycom_cap
         do i=1,ii
           covice(i,j) = dataPtr_sic(i,j) !Sea Ice Concentration
           si_c  (i,j) = dataPtr_sic(i,j) !Sea Ice Concentration
-! CICE use puny as criterium (fewer copy commands). Moreover, if used for final differences, these calculations would be affected differently depending on puny vs. 0.0.
-!          if (covice(i,j)>0.0) then
-          if (covice(i,j)>puny) then
+          ! CICE use puny as criterium for open water. This is handled in cice_cap.F90
+          if (covice(i,j)>0.0) then
             if (frzh(i,j)>0.0) then
               ! --- add energy to move tmxl towards tfrz (only if tmxl < tfrz)
               ! This is all the available for freezing. This has been cell averaged
