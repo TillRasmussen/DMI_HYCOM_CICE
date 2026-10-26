@@ -13,6 +13,7 @@ module cice_cap
                         get_block_parameter
   use ice_domain_size, only: max_blocks, nx_global, ny_global, nilyr
   use icepack_tracers, only: nt_sice
+  use icepack_intfc, only: icepack_sea_freezing_temperature
   use ice_domain, only: nblocks, blocks_ice, distrb_info
   use ice_distribution, only: ice_distributiongetblockloc
   use icepack_parameters, only: rad_to_deg
@@ -20,6 +21,7 @@ module cice_cap
   use ice_flux
   use ice_grid, only: TLAT, TLON, ULAT, ULON, hm, tarea, ANGLET, ANGLE, &
                       dxt, dyt, grid_average_X2Y
+!                      dxt, dyt, t2ugrid_vector
   use icepack_parameters, only: puny
   use ice_state
   use CICE_RunMod
@@ -284,34 +286,63 @@ module cice_cap
     delayout = ESMF_DELayoutCreate(petMap(1:peIDCount), rc=rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
 
+    !-------------------------------------------------------------------
+    ! Each active CICE block becomes one ESMF DE; petMap maps that DE onto
+    ! the PET that owns the block.  Several DEs per PET are allowed, so the
+    ! CICE decomposition no longer has to be one block per task and a load
+    ! balancing distribution_type (roundrobin, spacecurve, ...) can be used.
+    !
+    ! The ordering that makes localDE = iblk-1 valid further down: the loop
+    ! above walks global block ids in increasing order and appends the active
+    ! ones, and CICE assigns blockLocalID with a per-processor counter over
+    ! the same increasing global order (ice_distribution.F90), so a PET's DEs
+    ! and its CICE local blocks are in the same sequence.
+    !
+    ! NOTE on land block elimination: the DistGrid is built from minIndex/
+    ! maxIndex over the whole global grid plus an explicit deBlockList, so
+    ! eliminated blocks leave index regions belonging to no DE.  ESMF 8.9.1
+    ! only requires that deBlocks do not overlap (ESMF_DistGrid.F90), it does
+    ! not require them to cover the index space, so this is allowed.  Such
+    ! regions are simply never read or written by the connectors.
+    !-------------------------------------------------------------------
+
     ! Check CICE allocated PES
     if (me==0) then
-      write(6,*)'DMI_CPL: Requested PES: ice_petCount     ',ice_petCount
-      write(6,*)'DMI_CPL: CICE allocated PES: nblocks_tot:',nblocks_tot
-      write(6,*)'DMI_CPL: CICE used PES: peIDCount:       ',peIDCount
+      write(6,*)'DMI_CPL: NUOPC Requested PES: ice_petCount   ',ice_petCount
+      write(6,*)'DMI_CPL: CICE PETs this component: npet      ',npet
+      write(6,*)'DMI_CPL: CICE allocated blocks: nblocks_tot: ',nblocks_tot
+      write(6,*)'DMI_CPL: CICE active blocks (DEs): peIDCount:',peIDCount
+      write(6,*)'DMI_CPL: CICE blocks on this PET: nblocks:   ',nblocks
     endif
-    if (peIDCount /= ice_petCount) then
+    if (npet /= ice_petCount) then
       if (me==0) then
-        write(6,*)'DMI_CPL: ERROR: Required CICE peIDCount not equal to requested ice_petCount'
-        write(6,*)'DMI_CPL: Hint:     Adjust ice_petCount in nuopc_nml file'
+        write(6,*)'DMI_CPL: ERROR: CICE PET count not equal to requested ice_petCount'
+        write(6,*)'DMI_CPL: FIX:   Adjust ice_petCount in nuopc_nml file'
       endif
-      call ESMF_LogWrite('DMI_CPL: ERROR: Required CICE peIDCount not equal to requested ice_petCount:', &
+      call ESMF_LogWrite('DMI_CPL: ERROR: CICE PET count not equal to requested ice_petCount:', &
+        ESMF_LOGMSG_ERROR, rc=rc)
+      rc = ESMF_RC_OBJ_BAD
+      return
+    endif
+    if (peIDCount < npet) then
+      if (me==0) then
+        write(6,*)'DMI_CPL: ERROR: fewer active CICE blocks than PETs: ',peIDCount,npet
+        write(6,*)'DMI_CPL: FIX:   reduce block_size_{x,y} in ice_in so every PET owns a block.'
+      endif
+      call ESMF_LogWrite('DMI_CPL: ERROR: fewer active CICE blocks than PETs', &
         ESMF_LOGMSG_ERROR, rc=rc)
       rc = ESMF_RC_OBJ_BAD
       return
     endif
     if (peIDCount /= nblocks_tot) then
       if (me==0) then
-        write(6,*)'DMI_CPL: ERROR: Required CICE peIDCount not equal to CICE allocated nblocks_tot.'
-        write(6,*)'DMI_CPL:          It is required for coupled runs.'
-        write(6,*)'DMI_CPL: Hint: Adjust block_size_{x,y}, processor_shape and/or distribution_type in ice_in file.'
+        write(6,*)'DMI_CPL: Number of unused CICE blocks:       ',nblocks_tot-peIDCount
+        write(6,*)'DMI_CPL: These belongs to no DE and are never coupled.'
       endif
-      call ESMF_LogWrite('DMI_CPL: ERROR: Required CICE peIDCount not equal to CICE allocated nblocks_tot', &
-        ESMF_LOGMSG_ERROR, rc=rc)
-      rc = ESMF_RC_OBJ_BAD
-      return
+      call ESMF_LogWrite('DMI_CPL: NOTE: eliminated CICE blocks leave gaps in the DistGrid', &
+        ESMF_LOGMSG_INFO, rc=rc)
     endif
-    if (me==0) write(6,*)'DMI_CPL: peIDCount equals requested ice_petCount: OK'
+    if (me==0) write(6,*)'DMI_CPL: CICE PET count matches ice_petCount:          OK'
 
     !- Use ice salinity for Tmlt calculation?
     if (me==0) then
@@ -575,7 +606,7 @@ module cice_cap
   !-----------------------------------------------------------------------------
 
   subroutine ModelAdvance(gcomp, rc)
-    use mod_nuopc_options, only  : tend
+    use mod_nuopc_options, only: tend
 
     type(ESMF_GridComp)         :: gcomp
     integer, intent(out)        :: rc
@@ -583,13 +614,15 @@ module cice_cap
     ! local variables
     type(ESMF_Clock)            :: clock
     type(ESMF_State)            :: importState, exportState
-    type(ESMF_Time)             :: currTime, finalTime
-    type(ESMF_TimeInterval)     :: timeStep, interval
+    type(ESMF_Time)             :: currTime
+    type(ESMF_TimeInterval)     :: timeStep
     type(ESMF_Field)            :: lfield,lfield2d
     type(ESMF_Grid)             :: grid
+    type(ESMF_TimeInterval)     :: interval
+    type(ESMF_Time)             :: finalTime
+    real(ESMF_KIND_R8)          :: next_minus_finalTime_r8
     real(ESMF_KIND_R8), pointer :: fldptr(:,:,:)
     real(ESMF_KIND_R8), pointer :: fldptr2d(:,:)
-    real(ESMF_KIND_R8)          :: next_minus_finalTime_r8
     type(block)                 :: this_block
     character(len=64)           :: fldname
     integer                     :: i,j,iblk,n,i1,i2,j1,j2
@@ -676,6 +709,9 @@ module cice_cap
 !       write(6,*)'MHRI: next_minus_finalTime_r8=',next_minus_finalTime_r8, next_minus_finalTime_r8>=0.
 !    endif
 
+!MHRI    if (me==1) call ESMF_TimePrint(currTime + timeStep, &
+!MHRI                     preString="DMI_CPL: ------------------> to: ", rc=rc)
+
     call CICE_Import(importState,rc)
     if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
       line=__LINE__, &
@@ -723,7 +759,7 @@ module cice_cap
     call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
     if (profile_memory) call ESMF_VMLogMemInfo("Leaving CICE Model_ADVANCE: ")
 
-    !call flush(6)
+    call flush(6)
   end subroutine ModelAdvance
 
   subroutine cice_model_finalize(gcomp, rc)
@@ -826,6 +862,10 @@ module cice_cap
     rc = ESMF_SUCCESS
 
     do i = 1, nfields
+      ! NOTE: the assoc branch below still wraps a (:,:,:) CICE array with
+      ! max_blocks as an ungridded dimension.  Nothing sets %assoc today
+      ! (no field in CICE_FieldsSetup passes 'data'), and it is NOT correct
+      ! for more than one block per PET - it would need one field per DE.
       if (field_defs(i)%assoc) then
         write(info, *) subname, tag, ' Field ', field_defs(i)%shortname, ':', &
           lbound(field_defs(i)%farrayPtr,1), ubound(field_defs(i)%farrayPtr,1), &
@@ -841,8 +881,10 @@ module cice_cap
           file=__FILE__)) &
           return  ! bail out
       else
+        ! One ESMF DE per CICE block, so a field is plain 2D on each DE and
+        ! needs no ungridded block dimension.  The block is selected with the
+        ! localDe argument of State_GetFldPtr, not with an array index.
         field = ESMF_FieldCreate(grid, ESMF_TYPEKIND_R8, indexflag=ESMF_INDEX_DELOCAL, &
-          ungriddedLBound=(/1/), ungriddedUBound=(/max_blocks/), &
           name=field_defs(i)%shortname, rc=rc)
         if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU, &
           line=__LINE__, &
@@ -890,10 +932,14 @@ module cice_cap
 
   !-----------------------------------------------------------------------------
 
-  subroutine State_GetFldPtr(ST, fldname, fldptr, rc)
+  ! Return the 2D data pointer of one field on one local DE.  There is one
+  ! DE per CICE block, and localDE = iblk-1 for CICE local block iblk.
+
+  subroutine State_GetFldPtr(ST, fldname, fldptr, localDe, rc)
     type(ESMF_State), intent(in) :: ST
     character(len=*), intent(in) :: fldname
-    real(ESMF_KIND_R8), pointer, intent(in) :: fldptr(:,:,:)
+    real(ESMF_KIND_R8), pointer  :: fldptr(:,:)
+    integer, intent(in)          :: localDe
     integer, intent(out), optional :: rc
 
     ! local variables
@@ -903,7 +949,7 @@ module cice_cap
     lrc = ESMF_SUCCESS
     call ESMF_StateGet(ST, itemName=trim(fldname), field=lfield, rc=lrc)
     if (ESMF_LogFoundError(rcToCheck=lrc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
-    call ESMF_FieldGet(lfield, farrayPtr=fldptr, rc=lrc)
+    call ESMF_FieldGet(lfield, localDe=localDe, farrayPtr=fldptr, rc=lrc)
     if (ESMF_LogFoundError(rcToCheck=lrc, msg=ESMF_LOGERR_PASSTHRU, line=__LINE__, file=__FILE__)) return
 
     if (present(rc)) rc = lrc
@@ -991,37 +1037,42 @@ module cice_cap
     type(ESMF_State)     :: st
     logical              :: initflag
     integer, intent(out) :: rc
-    real(kind=ESMF_KIND_R8),pointer :: dataPtr_sst(:,:,:)
-    real(kind=ESMF_KIND_R8),pointer :: dataPtr_sss(:,:,:)
-    real(kind=ESMF_KIND_R8),pointer :: dataPtr_sssz(:,:,:)
-    real(kind=ESMF_KIND_R8),pointer :: dataPtr_sssm(:,:,:)
-    real(kind=ESMF_KIND_R8),pointer :: dataPtr_ocncz(:,:,:)
-    real(kind=ESMF_KIND_R8),pointer :: dataPtr_ocncm(:,:,:)
-    real(kind=ESMF_KIND_R8),pointer :: dataPtr_fmpot(:,:,:)
-    real(kind=ESMF_KIND_R8),pointer :: dataPtr_mld(:,:,:)
+    real(kind=ESMF_KIND_R8),pointer :: dataPtr_sst(:,:)
+    real(kind=ESMF_KIND_R8),pointer :: dataPtr_sss(:,:)
+    real(kind=ESMF_KIND_R8),pointer :: dataPtr_sssz(:,:)
+    real(kind=ESMF_KIND_R8),pointer :: dataPtr_sssm(:,:)
+    real(kind=ESMF_KIND_R8),pointer :: dataPtr_ocncz(:,:)
+    real(kind=ESMF_KIND_R8),pointer :: dataPtr_ocncm(:,:)
+    real(kind=ESMF_KIND_R8),pointer :: dataPtr_fmpot(:,:)
+    real(kind=ESMF_KIND_R8),pointer :: dataPtr_mld(:,:)
     integer                    :: ilo,ihi,jlo,jhi 
-    integer                    :: i,j,iblk,n,i1,i2,j1,j2
+    integer                    :: i,j,iblk,n,i1,i2,j1,j2,DE
     real(kind=ESMF_KIND_R8)    :: ue, vn, AngT_s 
     type(block)                :: this_block
     character(len=*),parameter :: subname='(cice_cap:CICE_Import)'
 
-    call State_getFldPtr(st,'sea_surface_temperature',dataPtr_sst,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call State_getFldPtr(st,'sea_surface_salinity',dataPtr_sss,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call State_getFldPtr(st,'sea_surface_slope_zonal',dataPtr_sssz,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call State_getFldPtr(st,'sea_surface_slope_merid',dataPtr_sssm,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call State_getFldPtr(st,'ocn_current_zonal',dataPtr_ocncz,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call State_getFldPtr(st,'ocn_current_merid',dataPtr_ocncm,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call State_getFldPtr(st,'freezing_melting_potential',dataPtr_fmpot,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call State_getFldPtr(st,'mixed_layer_depth',dataPtr_mld,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+    ! One ESMF DE per CICE block: the field pointers are fetched per block,
+    ! with localDE = iblk-1 (the same mapping the grid coordinates use).
     do iblk = 1,nblocks
+       DE = iblk-1
+
+       call State_getFldPtr(st,'sea_surface_temperature',dataPtr_sst,DE,rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+       call State_getFldPtr(st,'sea_surface_salinity',dataPtr_sss,DE,rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+       call State_getFldPtr(st,'sea_surface_slope_zonal',dataPtr_sssz,DE,rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+       call State_getFldPtr(st,'sea_surface_slope_merid',dataPtr_sssm,DE,rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+       call State_getFldPtr(st,'ocn_current_zonal',dataPtr_ocncz,DE,rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+       call State_getFldPtr(st,'ocn_current_merid',dataPtr_ocncm,DE,rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+       call State_getFldPtr(st,'freezing_melting_potential',dataPtr_fmpot,DE,rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+       call State_getFldPtr(st,'mixed_layer_depth',dataPtr_mld,DE,rc=rc)
+       if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+
        this_block = get_block(blocks_ice(iblk),iblk)
        ilo = this_block%ilo
        ihi = this_block%ihi
@@ -1031,86 +1082,96 @@ module cice_cap
        do i = ilo,ihi
           i1 = i - ilo + 1
           j1 = j - jlo + 1
-          sss    (i,j,iblk) = dataPtr_sss  (i1,j1,iblk)  ! sea surface salinity (maybe for mushy layer)
-          sst    (i,j,iblk) = dataPtr_sst  (i1,j1,iblk)  ! sea surface temp [C] (may not be needed?)
-          frzmlt (i,j,iblk) = dataPtr_fmpot(i1,j1,iblk)
+          sss    (i,j,iblk) = dataPtr_sss  (i1,j1)  ! sea surface salinity (maybe for mushy layer)
+          sst    (i,j,iblk) = dataPtr_sst  (i1,j1)  ! sea surface temp [C] (may not be needed?)
+          Tf     (i,j,iblk) = icepack_sea_freezing_temperature(sss(i,j,iblk))  ! Update: ocean freezing point in CICE
+          frzmlt (i,j,iblk) = dataPtr_fmpot(i1,j1)
           ! C-grid: (U,V) to T grid cell and rotate
-          ue = dataPtr_ocncz  (i1,j1,iblk)
-          vn = dataPtr_ocncm  (i1,j1,iblk)
+          ue = dataPtr_ocncz  (i1,j1)
+          vn = dataPtr_ocncm  (i1,j1)
           AngT_s = ANGLET(i,j,iblk)
           uocn   (i,j,iblk) = ue*cos(AngT_s) - vn*sin(AngT_s)
           vocn   (i,j,iblk) = ue*sin(AngT_s) + vn*cos(AngT_s)
-          ue = dataPtr_sssz  (i1,j1,iblk)
-          vn = dataPtr_sssm  (i1,j1,iblk)
+          ue = dataPtr_sssz  (i1,j1)
+          vn = dataPtr_sssm  (i1,j1)
           ss_tltx(i,j,iblk) = ue*cos(AngT_s) - vn*sin(AngT_s)
           ss_tlty(i,j,iblk) = ue*sin(AngT_s) + vn*cos(AngT_s)
        enddo
        enddo
-       ! B-grid: T to U grid cell
-       call grid_average_X2Y('S', ss_tltx, 'T', ss_tltx, 'U')
-       call grid_average_X2Y('S', ss_tlty, 'T', ss_tlty, 'U')
-       call grid_average_X2Y('S', uocn, 'T', uocn, 'U')
-       call grid_average_X2Y('S', vocn, 'T', vocn, 'U')
     enddo
+
+    ! B-grid: T to U grid cell.  grid_average_X2Y works on the whole
+    ! (nx_block,ny_block,max_blocks) array, so it must be called once after all
+    ! blocks are filled - inside the block loop it would re-average its own
+    ! output as soon as there is more than one block per task.
+    call grid_average_X2Y('S', ss_tltx, 'T', ss_tltx, 'U')
+    call grid_average_X2Y('S', ss_tlty, 'T', ss_tlty, 'U')
+    call grid_average_X2Y('S', uocn, 'T', uocn, 'U')
+    call grid_average_X2Y('S', vocn, 'T', vocn, 'U')
 
   end subroutine CICE_Import
 
   subroutine CICE_Export(st,rc)
   type(ESMF_State)     :: st
   integer, intent(out) :: rc
-!    real(ESMF_KIND_R8), pointer :: dataPtr_mask(:,:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_ifrac(:,:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_itemp(:,:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_strocnxT(:,:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_strocnyT(:,:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_fhocn(:,:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_fresh(:,:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_fsalt(:,:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_vice(:,:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_vsno(:,:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_fswthru(:,:,:)
-    real(ESMF_KIND_R8), pointer :: dataPtr_sice(:,:,:)
+!    real(ESMF_KIND_R8), pointer :: dataPtr_mask(:,:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_ifrac(:,:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_itemp(:,:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_strocnxT(:,:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_strocnyT(:,:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_fhocn(:,:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_fresh(:,:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_fsalt(:,:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_vice(:,:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_vsno(:,:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_fswthru(:,:)
+    real(ESMF_KIND_R8), pointer :: dataPtr_sice(:,:)
 
     integer                     :: ilo,ihi,jlo,jhi
-    integer                     :: i,j,iblk,n,i1,i2,j1,j2, k
+    integer                     :: i,j,iblk,n,i1,i2,j1,j2, k, DE
     real(kind=ESMF_KIND_R8)     :: ui, vj, angT, sice
     
     type(block)                 :: this_block
     character(len=*),parameter  :: subname='(cice_cap:CICE_Export)'
-!TODO clean up fields
-    call State_getFldPtr(st,'sea_ice_fraction',dataPtr_ifrac,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call State_getFldPtr(st,'sea_ice_temperature',dataPtr_itemp,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call State_getFldPtr(st,'stress_on_ocn_ice_zonal',dataPtr_strocnxT,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call State_getFldPtr(st,'stress_on_ocn_ice_merid',dataPtr_strocnyT,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call State_getFldPtr(st,'net_heat_flx_to_ocn',dataPtr_fhocn,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call State_getFldPtr(st,'mean_fresh_water_to_ocean_rate',dataPtr_fresh,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call State_getFldPtr(st,'mean_salt_rate',dataPtr_fsalt,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call State_getFldPtr(st,'mean_ice_volume',dataPtr_vice,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call State_getFldPtr(st,'mean_snow_volume',dataPtr_vsno,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call State_getFldPtr(st,'mean_sw_pen_to_ocn',dataPtr_fswthru,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-    call State_getFldPtr(st,'ice_salinity',dataPtr_sice,rc=rc)
-    if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
-
-    write(info, *) subname//' ifrac size :', &
-    lbound(dataPtr_ifrac,1), ubound(dataPtr_ifrac,1), &
-    lbound(dataPtr_ifrac,2), ubound(dataPtr_ifrac,2), &
-    lbound(dataPtr_ifrac,3), ubound(dataPtr_ifrac,3)
-    call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
-    dataPtr_ifrac = 0._ESMF_KIND_R8
-    dataPtr_itemp = 0._ESMF_KIND_R8
-    dataPtr_sice  = 0._ESMF_KIND_R8
-    call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
+    ! One ESMF DE per CICE block: fetch the field pointers per block, with
+    ! localDE = iblk-1 (the same mapping the grid coordinates use).
     do iblk = 1,nblocks
+      DE = iblk-1
+  !TODO clean up fields
+      call State_getFldPtr(st,'sea_ice_fraction',dataPtr_ifrac,DE,rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+      call State_getFldPtr(st,'sea_ice_temperature',dataPtr_itemp,DE,rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+      call State_getFldPtr(st,'stress_on_ocn_ice_zonal',dataPtr_strocnxT,DE,rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+      call State_getFldPtr(st,'stress_on_ocn_ice_merid',dataPtr_strocnyT,DE,rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+      call State_getFldPtr(st,'net_heat_flx_to_ocn',dataPtr_fhocn,DE,rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+      call State_getFldPtr(st,'mean_fresh_water_to_ocean_rate',dataPtr_fresh,DE,rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+      call State_getFldPtr(st,'mean_salt_rate',dataPtr_fsalt,DE,rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+      call State_getFldPtr(st,'mean_ice_volume',dataPtr_vice,DE,rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+      call State_getFldPtr(st,'mean_snow_volume',dataPtr_vsno,DE,rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+      call State_getFldPtr(st,'mean_sw_pen_to_ocn',dataPtr_fswthru,DE,rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+      call State_getFldPtr(st,'ice_salinity',dataPtr_sice,DE,rc=rc)
+      if (ESMF_LogFoundError(rcToCheck=rc, msg=ESMF_LOGERR_PASSTHRU,line=__LINE__,file=__FILE__)) return
+
+        if (iblk == 1) then
+          write(info, *) subname//' ifrac size :', &
+          lbound(dataPtr_ifrac,1), ubound(dataPtr_ifrac,1), &
+          lbound(dataPtr_ifrac,2), ubound(dataPtr_ifrac,2)
+          call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
+        endif
+      dataPtr_ifrac = 0._ESMF_KIND_R8
+      dataPtr_itemp = 0._ESMF_KIND_R8
+      dataPtr_sice  = 0._ESMF_KIND_R8
+      call ESMF_LogWrite(info, ESMF_LOGMSG_INFO, rc=dbrc)
+
       this_block = get_block(blocks_ice(iblk),iblk)
       ilo = this_block%ilo
       ihi = this_block%ihi
@@ -1121,21 +1182,21 @@ module cice_cap
           i1 = i - ilo + 1
           j1 = j - jlo + 1
           if (aice(i,j,iblk) < puny) then
-            dataPtr_ifrac (i1,j1,iblk) = 0._ESMF_KIND_R8      ! CICE threats aice<puny as open water, ie. aice=0
+            dataPtr_ifrac (i1,j1) = 0._ESMF_KIND_R8      ! CICE threats aice<puny as open water, ie. aice=0
           else
-            dataPtr_ifrac (i1,j1,iblk) = aice(i,j,iblk)       ! ice fraction (0-1)
+            dataPtr_ifrac (i1,j1) = aice(i,j,iblk)       ! ice fraction (0-1)
           endif
-          dataPtr_fhocn   (i1,j1,iblk) = fhocn_ai(i,j,iblk)   ! heat exchange with ocean
-          dataPtr_fresh   (i1,j1,iblk) = fresh_ai(i,j,iblk)   ! fresh water to ocean
-          dataPtr_fsalt   (i1,j1,iblk) = fsalt_ai(i,j,iblk)   ! salt to ocean
-          dataPtr_vice    (i1,j1,iblk) = vice(i,j,iblk)       ! sea ice volume
-          dataPtr_vsno    (i1,j1,iblk) = vsno(i,j,iblk)       ! snow volume
-          dataPtr_fswthru (i1,j1,iblk) = fswthru_ai(i,j,iblk) ! short wave penetration through ice
+          dataPtr_fhocn   (i1,j1) = fhocn_ai(i,j,iblk)   ! heat exchange with ocean
+          dataPtr_fresh   (i1,j1) = fresh_ai(i,j,iblk)   ! fresh water to ocean
+          dataPtr_fsalt   (i1,j1) = fsalt_ai(i,j,iblk)   ! salt to ocean
+          dataPtr_vice    (i1,j1) = vice(i,j,iblk)    ! sea ice volume
+          dataPtr_vsno    (i1,j1) = vsno(i,j,iblk)    ! snow volume
+          dataPtr_fswthru (i1,j1) = fswthru_ai(i,j,iblk) ! short wave penetration through ice
           ui = strocnxT_iavg(i,j,iblk)
           vj = strocnyT_iavg(i,j,iblk)
           angT = ANGLET(i,j,iblk)
-          dataPtr_strocnxT(i1,j1,iblk) =  ui*cos(-angT) + vj*sin(angT)  ! ice ocean stress
-          dataPtr_strocnyT(i1,j1,iblk) = -ui*sin(angT)  + vj*cos(-angT) ! ice ocean stress
+          dataPtr_strocnxT(i1,j1) =  ui*cos(-angT) + vj*sin(angT)  ! ice ocean stress
+          dataPtr_strocnyT(i1,j1) = -ui*sin(angT)  + vj*cos(-angT)  ! ice ocean stress
           !-- sice (ice_history.F90)
           if (nt_sice<1) then
             sice = 0._ESMF_KIND_R8
@@ -1149,7 +1210,7 @@ module cice_cap
             ! Salinity in BOTTOM layer (in contact with ocean!)
 !            sice=trcr(i,j,nt_sice+nilyr-1,iblk)
           endif
-          dataPtr_sice(i1,j1,iblk) = sice  ! ice salinity
+          dataPtr_sice(i1,j1) = sice  ! ice salinity
         enddo
       enddo
     enddo
